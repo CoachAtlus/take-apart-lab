@@ -1,5 +1,9 @@
 # Take-Apart Lab
 
+![Take-Apart Lab](og-image.png)
+
+**Play it:** https://coachatlus.github.io/take-apart-lab/ (works on an iPad: Share, then Add to Home Screen)
+
 A 3D take-it-apart game for a 5-year-old. Pick a device, spin it around, tap parts to pull them out, and watch what breaks. A friendly voice explains each part. A "Fix-it mission" breaks one part; the kid reads the symptom and finds it.
 
 Devices so far, with pieces at Beginner / Medium / Advanced:
@@ -22,13 +26,14 @@ Sparky, a talking robot, walks the kid through each device step by step: a glowi
 
 ## Going deeper
 
-- **Look inside:** touch a part, then tap the blue magnifying glass to shrink down inside it. Worlds go several levels deep, for example:
+- **Look inside:** tap the **Look inside** button and everything with an inside glows blue and gets a tag. Tap one to shrink down inside it (or touch a part and tap its floating magnifying glass). There are 27 worlds, several levels deep, for example:
   - LED light > LED (20x) > LED chip (1,000x) > atoms making light (1,000,000x)
   - processor chip (10x) > the silicon (100x) > one transistor (1,000,000x) > silicon atoms (100,000,000x)
-- Others: battery and its chemistry, capacitor and its plates, LCD pixel and liquid crystal, speaker, transformer, and the picture tube and its phosphor dots.
+- Others: wire > copper atoms, screw, resistor, fuse (watch the wire melt), magnet, heat sink, switch, circuit board, diode, battery and its chemistry, capacitor and its plates, LCD pixel and liquid crystal, speaker, transformer, and the picture tube and its phosphor dots.
 - The trail at the top shows where you are, and **Back** climbs out one level.
 - **Tell me more:** each tap goes one level deeper: For kids, How it works, How it's built, The science, Deep dive. The deeper levels live in `js/learn.js`, keyed by part name.
-- Drag up or down to look from above or underneath. The table fades away when you look from below.
+- Drag up or down to look from above or underneath. The table turns with the device and fades away when you look from below.
+- Drag a loose piece to slide it around the table. Zoom with a pinch or the + and - buttons; zooming in centers on the last piece you touched.
 
 ## How it's built
 

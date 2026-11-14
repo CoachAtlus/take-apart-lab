@@ -902,6 +902,9 @@
     },
   });
 
+  // shared with js/worlds-more.js
+  TAL.wk = { world, view, part, upd, show, glowOn, halo, lattice, cutTube, BLUE, PINK, WHITE, GOLD };
+
   // =====================================================================  which parts open into which world
   Object.assign(TAL.insideByName, {
     'LED light': 'led-package', 'LED bulb': 'led-package', 'LED chip': 'led-die',

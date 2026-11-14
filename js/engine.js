@@ -859,9 +859,20 @@
         o.children.forEach(collect);
       };
       collect(part.obj);
+      // the part's visual center (its group's origin can sit far away from the piece itself)
+      part.center = new THREE.Vector3();
+      if (part.meshes.length) {
+        const box = new THREE.Box3();
+        part.meshes.forEach((m) => box.expandByObject(m));
+        part.obj.worldToLocal(box.getCenter(part.center));
+      } else {
+        const lab = part.obj.children.find((c) => c.isSprite);
+        if (lab) part.center.copy(lab.position).y -= 0.4;
+      }
       inst.parts.push(part);
       inst.byId[part.id] = part;
     });
+    inst.parts.forEach((p) => { p.hasInside = !!insideOf(p); });
     inst.parts.forEach((p) => {
       if (!p.parent) return;
       const par = inst.byId[p.parent];
@@ -897,7 +908,7 @@
   };
   TAL.app = App;
   let renderer, scene, camera, turntable, raycaster, kit, sparks, smoke, confetti, dotTex, shadowTex, table, stage, bgDevice, bgWorld, thumbEnv;
-  const GLOW = new THREE.Color(0xffc23a);
+  const GLOW = new THREE.Color(0xffc23a), LOOK_GLOW = new THREE.Color(0x2f7de0);
   const tmpC = new THREE.Color(), tmpQ = new THREE.Quaternion(), tmpQ2 = new THREE.Quaternion(), Y_AXIS = new THREE.Vector3(0, 1, 0), IDENT = new THREE.Quaternion();
   const tgt = new THREE.Vector3(0, 2, 0);
 
@@ -938,7 +949,7 @@
     updateUI();
     return out;
   }
-  function worldPos(p) { return p.obj.getWorldPosition(new THREE.Vector3()); }
+  function worldPos(p) { return p.center ? p.obj.localToWorld(p.center.clone()) : p.obj.getWorldPosition(new THREE.Vector3()); }
   function sparkAt(p) {
     const w = worldPos(p);
     sparks.emit(w, 46, { speed: 4, upBias: 1, up: 1.5, life: 0.7, colors: ['#fff6b0', '#ffc23a', '#ff7b2b', '#ffffff'], spread: 0.3 });
@@ -1360,6 +1371,7 @@
       return;
     }
     const p = hit.part;
+    if (App.lookMode && p.hasInside) { diveInto(p); return; }
     if (App.focus && p === App.focus) { Voice.say(`${p.say} Pull its pieces off with your finger!`, learnFor(p), false, [p.say, 'Pull its pieces off with your finger!']); Caption.setPart(p); return; }
     if (p.fixed) { explain(p); return; }
     if (p.target === 0) tryRemove(p);
@@ -1398,7 +1410,7 @@
       if (pointers.size === 2 && pinch) {
         const [a, b] = [...pointers.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
-        App.zoomT = clamp((pinch.z * pinch.d) / Math.max(1, d), 0.35, 1.8);
+        App.zoomT = clamp((pinch.z * pinch.d) / Math.max(1, d), 0.25, 1.8);
         return;
       }
       if (pointers.size !== 1 || p.moved < 8 || !drag) return;
@@ -1422,7 +1434,14 @@
             part.manual = true;
             setTip(null);
           }
+        } else if (part && part.target === 1 && !part.fixed && part.t > 0.95 && !(App.focus && part === App.focus)) {
+          drag.mode = 'move';
+          setTip(null);
         } else drag.mode = App.focus ? 'spin' : 'rotate';
+      }
+      if (drag.mode === 'move') {
+        movePart(drag, p.x, p.y);
+        return;
       }
       if (drag.mode === 'pull') {
         const part = drag.part, ddx = p.x - p.sx, ddy = p.y - p.sy;
@@ -1438,7 +1457,7 @@
         App.focus.spinPitch = clamp(App.focus.spinPitch + dy * 0.01, -1.4, 1.4);
       } else if (drag.mode === 'rotate') {
         App.yawT += dx * 0.009;
-        App.pitchT = clamp(App.pitchT + dy * 0.006, -1.3, 1.4);
+        App.pitchT = clamp(App.pitchT + dy * 0.006, -1.05, 1.4);
         setTip(null);
       }
     });
@@ -1459,18 +1478,36 @@
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
     canvas.addEventListener('pointerleave', () => { if (!pointers.size) { App.hovered = null; setTip(null); } });
-    canvas.addEventListener('wheel', (e) => { e.preventDefault(); App.zoomT = clamp(App.zoomT * Math.exp(e.deltaY * 0.0012), 0.35, 1.8); }, { passive: false });
+    canvas.addEventListener('wheel', (e) => { e.preventDefault(); App.zoomT = clamp(App.zoomT * Math.exp(e.deltaY * 0.0012), 0.25, 1.8); }, { passive: false });
     // iPad: stop the page itself from zooming or showing callouts
     ['gesturestart', 'gesturechange', 'gestureend'].forEach((t) => document.addEventListener(t, (e) => e.preventDefault()));
     document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
     document.addEventListener('contextmenu', (e) => { if (e.target === canvas) e.preventDefault(); });
+  }
+  // Slide a pulled-out piece across a plane facing the camera, never below the tabletop.
+  function movePart(drag, x, y) {
+    const part = drag.part, wp = worldPos(part);
+    const r = renderer.domElement.getBoundingClientRect();
+    raycaster.setFromCamera(new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1), camera);
+    if (!drag.plane) drag.plane = new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), wp);
+    const hit = new THREE.Vector3();
+    if (!raycaster.ray.intersectPlane(drag.plane, hit)) return;
+    if (!drag.grab) { drag.grab = hit.clone().sub(wp); return; }
+    const want = hit.sub(drag.grab);
+    want.y = Math.max(want.y, 0.12);
+    const local = part.obj.parent.worldToLocal(want);
+    local.sub(part.center.clone().applyQuaternion(part.obj.quaternion)).sub(part.home);
+    if (part.kind === 'screw') local.addScaledVector(part.axisOut, -0.35);
+    part.pullV.copy(local);
+    part.moved = true;
+    Caption.setPart(part);
   }
   function hover(x, y) {
     const hit = pick(x, y);
     const p = hit && hit.part ? hit.part : null;
     App.hovered = p;
     renderer.domElement.style.cursor = p ? 'pointer' : 'grab';
-    if (p) setTip(p.name, p.target === 0 ? 'Drag or tap to pull it out' : p.kids.length && !App.focus ? 'Tap to look closer' : 'Tap to put it back', x, y);
+    if (p) setTip(p.name, (p.fixed ? 'Tap to learn about it' : p.target === 0 ? 'Drag or tap to pull it out' : p.kids.length && !App.focus ? 'Tap to look closer, drag to move' : 'Tap to put it back, drag to move') + (p.hasInside ? '. Has an inside view!' : ''), x, y);
     else setTip(null);
   }
   function setTip(name, sub, x, y) {
@@ -1495,6 +1532,7 @@
     $('#btnApart').classList.toggle('active', !anyIn);
     $('#btnXray').classList.toggle('active', App.xray);
     $('#btnMission').classList.toggle('active', !!App.mission);
+    $('#btnLook').hidden = !inst.parts.some((p) => p.hasInside);
     $('#btnSound').classList.toggle('off', Sound.muted);
     $('#btnVoice').classList.toggle('off', !Voice.on);
     $('#btnGuide').classList.toggle('off', !Guide.on);
@@ -1519,6 +1557,7 @@
   // ---- devices, and the worlds inside their parts: a stack (device > LED > LED chip > atoms)
   function disposeStack() { App.stack.forEach((st) => disposeTree(st.inst.root)); App.stack = []; }
   function loadInst(def, level, world) {
+    setLookMode(false);
     const inst = instantiate(def, kit, level);
     if (!world) {
       const sh = def.view.shadow || [5, 4];
@@ -1538,7 +1577,7 @@
     setWorldLook(world);
     Guide.reset(inst);
     refresh();
-    $('#home').hidden = true; $('#hud-top').hidden = false; $('#tools').hidden = false;
+    $('#home').hidden = true; $('#hud-top').hidden = false; $('#tools').hidden = false; $('#zoomCtl').hidden = false;
     $('#btnChannel').hidden = !def.channels;
     $('#btnMission').hidden = world || !inst.parts.some((p) => p.symptom);
     updateMissionUI();
@@ -1575,6 +1614,7 @@
     Voice.stop();
     setTip(null);
     App.diving = { p, def: TAL.worlds[id] };
+    setLookMode(false);
     Sound.whoosh();
     $('#zoomFx').className = 'in';
     setTimeout(() => {
@@ -1592,6 +1632,7 @@
     }, 620);
   }
   function goBack() {
+    setLookMode(false);
     if (!App.stack.length) { goHome(); return; }
     App.seq++;
     Voice.stop();
@@ -1647,7 +1688,7 @@
     Caption.setPart(null);
     setWorldLook(false);
     $('#zoomFx').className = '';
-    $('#home').hidden = false; $('#hud-top').hidden = true; $('#tools').hidden = true; $('#mission').hidden = true; $('#focusBar').hidden = true; $('#hand').hidden = true; $('#lookBadge').hidden = true;
+    $('#home').hidden = false; $('#hud-top').hidden = true; $('#tools').hidden = true; $('#mission').hidden = true; $('#focusBar').hidden = true; $('#hand').hidden = true; $('#lookBadge').hidden = true; $('#zoomCtl').hidden = true;
     $('#caption').classList.remove('show');
     setTip(null);
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignore */ }
@@ -1831,6 +1872,17 @@
     on('#btnTurn', () => { App.yawT += Math.PI; Sound.whoosh(); });
     on('#btnXray', () => { setXray(!App.xray); Sound.click(); if (App.xray) Caption.show('X-ray vision! Now you can see inside the case.'); });
     on('#btnApart', explodeAll);
+    on('#btnLook', toggleLookMode);
+    on('#btnZoomIn', () => { App.zoomT = clamp(App.zoomT * 0.7, 0.25, 1.8); });
+    on('#btnZoomOut', () => { App.zoomT = clamp(App.zoomT / 0.7, 0.25, 1.8); });
+    on('#btnZoomReset', () => {
+      if (!App.inst) return;
+      const v = App.inst.def.view;
+      App.zoomT = 1; App.yawT = v.yaw || 0; App.pitchT = v.pitch == null ? 0.2 : v.pitch;
+      Caption.setPart(null);
+    });
+    on('#btnHelp', () => { $('#helpCard').hidden = false; });
+    on('#btnHelpClose', () => { $('#helpCard').hidden = true; });
     on('#btnMission', startMission);
     on('#btnHint', hint);
     on('#btnStop', stopMission);
@@ -1885,9 +1937,14 @@
     } else {
       const outFrac = inst.parts.reduce((s, p) => s + p.t, 0) / inst.parts.length;
       const f = Math.min(1, outFrac * 1.8);
-      tgt.lerp(new THREE.Vector3(0, lerp(v.target[1], v.explodedY || v.target[1], f), 0), k3);
+      const center = new THREE.Vector3(0, lerp(v.target[1], v.explodedY || v.target[1], f), 0);
+      // zoomed in? lean toward the last piece you touched
+      const zp = Caption.part && inst.parts.indexOf(Caption.part) >= 0 ? Caption.part : null;
+      const lean = zp ? clamp((1 - App.zoom) / 0.55, 0, 1) : 0;
+      if (lean > 0) center.lerp(worldPos(zp), lean);
+      tgt.lerp(center, k3);
       wantR = lerp(v.radius, v.explodedRadius || v.radius * 1.5, f) * App.zoom;
-      wantLift = wantR * 0.22;
+      wantLift = wantR * 0.22 * (1 - lean);
     }
     const kR = App.diving ? Math.min(1, dt * 5) : k3;
     App.R += (wantR - App.R) * kR;
@@ -1897,13 +1954,12 @@
     camera.lookAt(tgt.x, tgt.y + App.lift, tgt.z);
     camLocal.set(0, Math.sin(App.pitch), Math.cos(App.pitch)).applyAxisAngle(Y_AXIS, -App.yaw).normalize();
     // the table (or the stage) fades away when you look from underneath
-    const under = camera.position.y < 0.4;
+    const tableWant = clamp((camera.position.y - 0.1) / 1.4, 0.06, 1);
     [table, stage].forEach((o) => o.traverse((m) => {
       if (!m.material) return;
-      const want = under ? 0.1 : 1;
       m.material.transparent = true;
-      m.material.opacity += (want - m.material.opacity) * k6;
-      m.material.depthWrite = m.material.opacity > 0.6;
+      m.material.opacity += (tableWant - m.material.opacity) * k6;
+      m.material.depthWrite = m.material.opacity > 0.9;
     }));
     let moving = App.diving || App.focus || Math.abs(App.yawT - App.yaw) > 0.002 || Math.abs(App.pitchT - App.pitch) > 0.002 || !!inst.def.tick;
 
@@ -1934,12 +1990,13 @@
       if (p.shake > 0) { p.shake -= dt; o.position.x += Math.sin(t * 70) * 0.05 * (p.shake / 0.5); }
       if (p.pulse > 0) p.pulse -= dt;
       const glow = (p === App.hovered ? 0.4 : 0) + (p.pulse > 0 ? (0.5 + 0.5 * Math.sin(t * 12)) * 0.7 : 0) + (p === guidePart ? (0.5 + 0.5 * Math.sin(t * 5)) * 0.55 : 0);
-      if (Math.abs(glow - p.glowNow) > 0.01) {
-        p.glowNow = glow;
+      const lg = App.lookMode && p.hasInside ? 0.45 + 0.3 * Math.sin(t * 4) : 0;
+      if (Math.abs(glow - p.glowNow) > 0.01 || Math.abs(lg - (p.lgNow || 0)) > 0.01) {
+        p.glowNow = glow; p.lgNow = lg;
         p.meshes.forEach((m) => {
           const mat = m.material;
           if (!mat.emissive || mat.userData.selfLit) return;
-          mat.emissive.setHex(mat.userData.e0 || 0).lerp(GLOW, Math.min(1, glow));
+          mat.emissive.setHex(mat.userData.e0 || 0).lerp(LOOK_GLOW, Math.min(1, lg)).lerp(GLOW, Math.min(1, glow));
         });
       }
       if (p.smoke) {
@@ -1961,15 +2018,81 @@
     Guide.tick();
     placeHand();
     placeLook();
+    placeLookTags();
+    autoQuality(dt);
   }
   // The magnifying glass floats over the last part you touched, if there's a world inside it.
+  function setLookMode(on) {
+    App.lookMode = !!on;
+    $('#btnLook').classList.toggle('active', App.lookMode);
+    if (!App.lookMode) $('#lookTags').innerHTML = '';
+  }
+  function toggleLookMode() {
+    if (!App.inst) return;
+    const kinds = new Set(App.inst.parts.filter((p) => p.hasInside).map((p) => p.name));
+    if (App.lookMode) { setLookMode(false); Caption.show('Look inside is off.'); return; }
+    if (!kinds.size) { Voice.say('Nothing here has an inside view yet. Try another part!'); return; }
+    setLookMode(true);
+    Sound.whoosh();
+    Voice.say(`Everything glowing blue has an inside! There are ${kinds.size} kinds here. Tap one to shrink down inside it.`, null, false,
+      'Everything glowing blue has an inside! Tap one to shrink down inside it.');
+  }
+  // In look-inside mode, one tag per kind of part (the nearest one you can see), so it never gets crowded.
+  function placeLookTags() {
+    const box = $('#lookTags');
+    if (!App.lookMode || !App.inst || App.diving) { if (box.childElementCount) box.innerHTML = ''; return; }
+    App.lookTagT = (App.lookTagT || 0) - 1;
+    const best = new Map();
+    App.inst.parts.forEach((p) => {
+      if (!p.hasInside) return;
+      const w = worldPos(p), sc = toScreen(w);
+      if (sc.x < 20 || sc.y < 80 || sc.x > innerWidth - 20 || sc.y > innerHeight - 110) return;
+      const d = w.distanceTo(camera.position), cur = best.get(p.name);
+      if (!cur || d < cur.d) best.set(p.name, { p, d, sc });
+    });
+    const list = [...best.values()].sort((a, b) => a.d - b.d).slice(0, 10);
+    // nudge tags up so they don't sit on top of each other
+    const placed = [];
+    list.forEach((it) => {
+      let y = it.sc.y;
+      for (let n = 0; n < 8 && placed.some((q) => Math.abs(q.x - it.sc.x) < 120 && Math.abs(q.y - y) < 32); n++) y -= 34;
+      it.sc = { x: it.sc.x, y };
+      placed.push(it.sc);
+    });
+    while (box.childElementCount < list.length) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'lookTag';
+      b.addEventListener('click', () => { if (b._part) diveInto(b._part); });
+      box.appendChild(b);
+    }
+    while (box.childElementCount > list.length) box.lastChild.remove();
+    list.forEach((it, i) => {
+      const b = box.children[i];
+      if (b._part !== it.p) { b._part = it.p; b.textContent = it.p.name; }
+      b.style.transform = `translate(${Math.round(it.sc.x)}px, ${Math.round(it.sc.y)}px) translate(-50%, -130%)`;
+    });
+  }
   function placeLook() {
     const b = $('#lookBadge'), p = Caption.part;
-    if (!p || App.diving || !App.inst || App.inst.parts.indexOf(p) < 0 || !insideOf(p)) { b.hidden = true; return; }
+    if (!p || App.diving || App.lookMode || !App.inst || App.inst.parts.indexOf(p) < 0 || !insideOf(p)) { b.hidden = true; return; }
     const sc = toScreen(worldPos(p));
     if (sc.x < 0 || sc.y < 0 || sc.x > innerWidth || sc.y > innerHeight) { b.hidden = true; return; }
     b.hidden = false;
     b.style.transform = `translate(${Math.min(innerWidth - 150, sc.x + 18)}px, ${Math.max(70, sc.y - 64)}px)`;
+  }
+  function autoQuality(dt) {
+    const q = App.quality || (App.quality = { t: 0, n: 0, done: false });
+    if (q.done || !App.inst || App.diving) return;
+    q.t += dt; q.n++;
+    if (q.t < 4) return;
+    q.done = true;
+    const fps = q.n / q.t;
+    if (fps < 40) {
+      renderer.shadowMap.enabled = false;
+      renderer.setPixelRatio(Math.min(1.25, window.devicePixelRatio || 1));
+      resize();
+      scene.traverse((m) => { if (m.material) m.material.needsUpdate = true; });
+    }
+    App.fps = Math.round(fps);
   }
   function resize() {
     renderer.setSize(innerWidth, innerHeight, false);
@@ -2007,11 +2130,10 @@
     table = new THREE.Mesh(new THREE.CylinderGeometry(13, 13, 0.4, 72), new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: 0.62, transparent: true }));
     table.position.y = -0.2;
     table.receiveShadow = true;
-    scene.add(table);
     stage = makeStage();
-    scene.add(stage);
     turntable = new THREE.Group();
     scene.add(turntable);
+    turntable.add(table, stage);
     dotTex = softDot(); shadowTex = shadowTexture();
     sparks = new Particles(500, 0.13, { gravity: 9, additive: true, fade: true, drag: 0.5 }, dotTex);
     smoke = new Particles(300, 0.8, { gravity: -0.4, drag: 1.2, opacity: 0.4 }, dotTex);
@@ -2051,6 +2173,7 @@
     });
     return [...set].map((t) => ({ h: hashText(t), t }));
   };
+  TAL.say = (text) => Voice.say(text);
   TAL.debug = {
     openDevice: (id, level) => openDevice(TAL.devices.find((d) => d.id === id), level), togglePower,
     voice: () => ({ clips: window.TAL_VOICE ? Object.keys(window.TAL_VOICE.clips).length : 0, talking: Voice.talking, src: Voice.el && Voice.el.src.slice(-20), unlocked: Voice.unlocked, ctx: Sound.ctx && Sound.ctx.state }), explodeAll, fixAll, startMission, nextChannel, setXray, hint,
@@ -2066,6 +2189,7 @@
       return { hit: hit ? (hit.shell ? 'shell' : hit.part.id) : null, caption: $('#capText').textContent };
     },
     screenOf: (id) => toScreen(worldPos(byId(id))),
+    pickAt: (x, y) => { const h = pick(x, y); return h ? (h.shell ? 'shell' : h.part.id) : null; },
     guide: () => ({ i: Guide.i, step: Guide.current() && Guide.current().do, target: Guide.target && (Guide.target.el || Guide.target.part.id), needTurn: Guide.needTurn }),
     state: () => ({ on: App.on, out: App.out, mission: App.mission, focus: App.focus && App.focus.id, outParts: App.inst.parts.filter(isOut).map((p) => p.id) }),
   };

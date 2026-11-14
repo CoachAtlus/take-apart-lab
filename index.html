@@ -6,6 +6,15 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Take-Apart">
 <meta name="theme-color" content="#141a27">
+<meta name="description" content="Take apart a TV and a flashlight in 3D, all the way down to the atoms. A take-it-apart game for curious kids.">
+<meta property="og:title" content="Take-Apart Lab">
+<meta property="og:description" content="Take apart a TV and a flashlight in 3D, all the way down to the atoms. A take-it-apart game for curious kids.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://coachatlus.github.io/take-apart-lab/">
+<meta property="og:image" content="https://coachatlus.github.io/take-apart-lab/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png">
@@ -197,6 +206,24 @@ button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
   #mission { top: auto; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.tool.look .ic { color: #8fc0ff; }
+.tool.look.active .ic { background: #2f7de0; color: #fff; border-color: #a9cdff; box-shadow: 0 0 22px rgba(47,125,224,0.6), 0 6px 0 rgba(0,0,0,0.4); }
+#lookTags { position: fixed; left: 0; top: 0; z-index: 4; pointer-events: none; }
+.lookTag { position: absolute; left: 0; top: 0; pointer-events: auto; border: 2px solid #fff; border-radius: 999px; background: #2f7de0; color: #fff;
+  font: 800 14px var(--display); padding: 5px 12px; white-space: nowrap; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
+.lookTag::before { content: ""; display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px; border: 2.5px solid #fff; border-radius: 50%; box-sizing: border-box; }
+#zoomCtl { position: fixed; right: max(12px, env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 10px; z-index: 3; }
+#zoomCtl button { width: 52px; height: 52px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.14); background: var(--panel); color: var(--ink); display: grid; place-items: center; cursor: pointer; box-shadow: 0 4px 0 rgba(0,0,0,0.35); }
+#zoomCtl button:active { transform: translateY(2px); }
+#zoomCtl svg { width: 26px; height: 26px; stroke: currentColor; fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+#helpCard { position: fixed; inset: 0; z-index: 12; background: rgba(5,8,14,0.6); display: grid; place-items: center; padding: 16px; }
+#helpCard[hidden] { display: none !important; }
+.helpInner { background: var(--bubble); color: var(--bubble-ink); border-radius: 24px; padding: 22px 24px; width: min(560px, 100%); max-height: 85vh; overflow-y: auto; box-shadow: 0 12px 0 rgba(0,0,0,0.3); }
+.helpInner h2 { margin: 0 0 8px; font-size: 26px; }
+.helpInner ul { margin: 0 0 16px; padding-left: 20px; line-height: 1.45; font-size: 17px; }
+.helpInner li { margin-bottom: 6px; }
+#btnHelpClose { border: 0; border-radius: 999px; background: var(--yellow); color: var(--yellow-ink); font: 800 18px var(--display); padding: 10px 26px; cursor: pointer; }
+@media (max-width: 560px) { #zoomCtl button { width: 44px; height: 44px; } #btnHelp { display: none; } }
 </style>
 
 <div id="app">
@@ -213,6 +240,7 @@ button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
     <button id="btnGuide" class="icon-btn" type="button" aria-label="Sparky's help on or off">
       <svg viewBox="0 0 24 24"><path d="M9 11V5a1.5 1.5 0 0 1 3 0v5"/><path d="M12 10V4a1.5 1.5 0 0 1 3 0v6"/><path d="M15 10V6a1.5 1.5 0 0 1 3 0v7a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-3l-2.5-4.5a1.5 1.5 0 0 1 2.6-1.5L9 14"/><path class="x" d="M3 3l18 18"/></svg>
     </button>
+    <button id="btnHelp" class="icon-btn" type="button" aria-label="How to play"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><path d="M12 17.5v.01"/></svg></button>
     <button id="btnSound" class="icon-btn" type="button" aria-label="Sound on or off">
       <svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path class="x" d="M3 3l18 18"/></svg>
     </button>
@@ -242,6 +270,27 @@ button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
   <div id="tip" hidden></div>
   <button id="lookBadge" type="button" hidden aria-label="Look inside this part"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg><span>Look inside</span></button>
   <div id="zoomFx"></div>
+  <div id="lookTags"></div>
+  <div id="zoomCtl" hidden>
+    <button id="btnZoomIn" type="button" aria-label="Zoom in"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button id="btnZoomOut" type="button" aria-label="Zoom out"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+    <button id="btnZoomReset" type="button" aria-label="Reset the view"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.6"/><path d="M4 4v5h5"/></svg></button>
+  </div>
+  <div id="helpCard" hidden>
+    <div class="helpInner">
+      <h2>How to play</h2>
+      <ul>
+        <li><b>Spin it:</b> drag on empty space. Drag up or down to look from above or underneath.</li>
+        <li><b>Zoom:</b> pinch, or use the + and &minus; buttons. Zooming in centers on the last piece you touched.</li>
+        <li><b>Take it apart:</b> drag a piece off with your finger (or tap it).</li>
+        <li><b>Move a piece:</b> drag a loose piece around the table. Tap it to put it back.</li>
+        <li><b>Look inside:</b> tap <b>Look inside</b>. Everything glowing blue has an inside. Tap one to shrink down inside it, then keep going deeper. <b>Back</b> climbs out.</li>
+        <li><b>Learn more:</b> tap <b>Tell me more</b> to go deeper, from kid level all the way to grown-up science.</li>
+        <li><b>Sparky:</b> the robot says what to do next. Tap him to hear it again. The hand button turns his help on or off.</li>
+      </ul>
+      <button id="btnHelpClose" type="button">Got it!</button>
+    </div>
+  </div>
   <div id="hand" hidden>
     <div class="ring"></div><div class="dot"></div>
     <div class="arrow"><svg viewBox="0 0 84 48" aria-hidden="true"><path d="M4 24h56" stroke="#ffc23a" stroke-width="10" stroke-linecap="round"/><path d="M50 8l26 16-26 16z" fill="#ffc23a"/></svg></div>
@@ -261,6 +310,7 @@ button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
     <button id="btnTurn" class="tool" type="button"><span class="ic"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></span><span class="lb">Turn around</span></button>
     <button id="btnXray" class="tool" type="button"><span class="ic"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="lb">X-ray</span></button>
     <button id="btnApart" class="tool" type="button"><span class="ic"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3"/></svg></span><span class="lb">Take apart</span></button>
+    <button id="btnLook" class="tool look" type="button"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg></span><span class="lb">Look inside</span></button>
     <button id="btnMission" class="tool" type="button"><span class="ic"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg></span><span class="lb">Fix-it mission</span></button>
   </nav>
 
@@ -277,10 +327,10 @@ button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
         <div class="note">
           <b>How to play</b>
           <ul>
-            <li>Drag to spin it around.</li>
-            <li>Pinch or scroll to zoom.</li>
-            <li>Drag a part with your finger to pull it out. Tap it to put it back.</li>
-            <li>Tap a board you pulled out to look closer and take its pieces off.</li>
+            <li>Drag to spin it around. Pinch or use + and &minus; to zoom.</li>
+            <li>Drag a part off with your finger. Drag a loose part to move it, tap it to put it back.</li>
+            <li>Tap <b>Look inside</b> and dive into anything glowing blue, all the way down to atoms.</li>
+            <li>Tap <b>Tell me more</b> to go deeper, from kid level to grown-up science.</li>
             <li>Sparky the robot tells you what to do next. Tap him to hear it again.</li>
             <li>Turn it on, then pull parts out and see what breaks!</li>
           </ul>
@@ -302,3 +352,4 @@ button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
 <script src="js/devices/flashlight.js"></script>
 <script src="js/learn.js"></script>
 <script src="js/worlds.js"></script>
+<script src="js/worlds-more.js"></script>
