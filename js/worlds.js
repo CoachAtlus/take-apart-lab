@@ -405,83 +405,194 @@
   });
 
   // =====================================================================  battery
+  // Grainy textures so the powder looks like powder, the paste like paste, the paper like paper.
+  const grainTex = (k, base, flecks, n, size, repeat) => {
+    const tex = k.canvasTex(256, 256, (c, w) => {
+      c.fillStyle = base; c.fillRect(0, 0, w, w);
+      for (let i = 0; i < n; i++) {
+        c.fillStyle = flecks[(Math.random() * flecks.length) | 0];
+        const s = size * (0.4 + Math.random());
+        c.beginPath(); c.arc(Math.random() * w, Math.random() * w, s, 0, Math.PI * 2); c.fill();
+      }
+    });
+    tex.wrapS = tex.wrapT = T.RepeatWrapping; tex.repeat.set(repeat[0], repeat[1]);
+    return tex;
+  };
+  const fiberTex = (k) => {
+    const tex = k.canvasTex(256, 256, (c, w) => {
+      c.fillStyle = '#efe4c8'; c.fillRect(0, 0, w, w);
+      for (let i = 0; i < 260; i++) {
+        c.strokeStyle = Math.random() < 0.5 ? 'rgba(170,150,110,0.35)' : 'rgba(255,255,245,0.5)'; c.lineWidth = 1 + Math.random();
+        const x = Math.random() * w, y = Math.random() * w, a = Math.random() * Math.PI, l = 8 + Math.random() * 22;
+        c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); c.stroke();
+      }
+    });
+    tex.wrapS = tex.wrapT = T.RepeatWrapping; tex.repeat.set(2, 2);
+    return tex;
+  };
+
   world({
     id: 'battery-inside', name: 'Inside a battery', zoom: '3×', short: 'battery',
-    view: view(1.5, 2.7, 3.6),
-    intro: 'This battery is cut open, 3 times bigger. Watch the blue electrons leave the bottom, light the bulb, and come back in the top!',
+    view: view(1.45, 3.4, 4.1, -0.6, 0.32),
+    intro: 'This battery is cut open, 3 times bigger. The gray paste in the middle has extra electrons it wants to give away. The black powder around the outside wants them. The paper wall between them won\'t let the electrons cross. So they take the long way: out the bottom, through the bulb, and back in the top. That trip lights the bulb!',
+    learn: [
+      'Follow the blue dots. They go from the zinc paste into the brass nail, down to the flat minus end, along the wire, through the bulb, in at the plus bump, down the steel can, and into the black powder.',
+      'Inside, the red dots cross the paper wall the other way. They are tiny charged bits that keep both sides balanced, so the electrons can keep on flowing.',
+      'Every electron that leaves uses up a little zinc. Watch the Zinc left meter. When the zinc is all used up, there is nothing left to give, and the battery is dead.',
+      'This kind of battery is called alkaline. It can\'t be recharged. Rechargeable batteries use chemicals that can be pushed back the other way.',
+    ],
     shellSay: 'This is a battery, cut open so you can see inside.',
     build(k) {
       const root = k.group(), parts = [], add = (s) => parts.push(part(k, root, s));
-      add({ id: 'can', name: 'Steel can', obj: cutTube(k, 0.7, 0.74, 2.4, 1.5, k.metal(0xc9ced6, { roughness: 0.3 })), pull: [-2.8, 0, -0.6], tagAt: [-0.85, 2.5, -0.4],
+      add({ id: 'can', name: 'Steel can', obj: cutTube(k, 0.7, 0.74, 2.4, 1.5, k.metal(0xc9ced6, { roughness: 0.3 })), pull: [-2.8, 0, -0.6], tagAt: [-0.95, 2.2, -0.5],
         say: 'The steel can holds everything in. It is also the plus side of the battery!',
-        learn: ['The can touches the black powder inside, so it carries the plus side all the way up to the bump on top.', 'It is sealed tight so the paste inside cannot leak out.'] });
-      add({ id: 'plusCap', name: 'Plus bump', obj: k.group(k.at(k.cyl(0.24, 0.24, 0.16, k.metal(0xd8dde4, { roughness: 0.2 }), 32), 0, 2.78, 0)), pull: [0, 1.0, 0], tagAt: [0.6, 3.0, 0],
-        say: 'The bump on top is the plus end.', learn: ['The electrons travel all the way around the loop and come back in here.'] });
-      add({ id: 'minusEnd', name: 'Minus end', fixed: true, obj: k.group(k.at(k.cyl(0.74, 0.74, 0.06, k.metal(0xb8bdc4, { roughness: 0.3 }), 48), 0, 0.27, 0)), tagAt: [0.9, 0.2, 0.6],
+        learn: ['The can presses against the black powder, so it carries the plus side all the way up to the bump on top.', 'It is sealed tight so the paste inside can\'t leak out.'] });
+      add({ id: 'plusCap', name: 'Plus bump', obj: k.group(k.at(k.cyl(0.24, 0.24, 0.16, k.metal(0xd8dde4, { roughness: 0.2 }), 32), 0, 2.78, 0)), pull: [0, 1.0, 0], tagAt: [0.15, 3.15, 0.2],
+        say: 'The bump on top is the plus end. Electrons come back in here after their trip.' });
+      add({ id: 'minusEnd', name: 'Minus end', fixed: true, obj: k.group(k.at(k.cyl(0.74, 0.74, 0.06, k.metal(0xb8bdc4, { roughness: 0.3 }), 48), 0, 0.27, 0)), tagAt: [-0.9, 0.15, 0.5],
         say: 'The flat bottom is the minus end. Electrons leave the battery here.',
         learn: ['Inside, the brass nail connects the zinc paste to this end.'] });
-      add({ id: 'cathode', name: 'Black powder', obj: cutTube(k, 0.48, 0.68, 2.1, 1.5, k.mat(0x26262a, { roughness: 0.95 })), blockedBy: ['can'], pull: [2.8, 0, -0.4], tagAt: [-0.7, 2.75, 0.45],
-        say: 'This black powder is manganese dioxide. It is hungry for electrons.',
-        learn: ['It pulls in electrons from the wire, after they have done their work lighting the bulb.', 'It is packed into a ring that presses against the steel can.', 'It is mixed with carbon powder so electricity can move through it easily.'] });
-      add({ id: 'separator', name: 'Paper wall', obj: cutTube(k, 0.45, 0.48, 2.1, 1.5, k.mat(0xe8dcc0, { roughness: 0.9 })), blockedBy: ['cathode'], pull: [-2.2, 0.5, 1.2], tagAt: [-0.3, 2.85, 0.75],
-        say: 'This paper wall keeps the two powders from touching.',
-        learn: ['If they touched, the battery would use itself up. The paper lets tiny charged bits through, but not the powders.', 'It is soaked in a watery liquid that lets those charged bits travel between the two sides.'] });
-      add({ id: 'anode', name: 'Zinc paste', obj: cutTube(k, 0.06, 0.45, 2.1, 1.5, k.mat(0x9a9ea6, { roughness: 0.85 })), inside: 'battery-chemistry', blockedBy: ['separator'], pull: [2.2, 0.5, 1.2], tagAt: [0.55, 1.2, 0.55],
-        say: 'This gray paste is full of zinc. Zinc gives away electrons!',
-        learn: ['When the loop is closed, zinc atoms let go of electrons. The electrons rush out through the brass nail and the wire.', 'As zinc gives away electrons it slowly turns into zinc oxide. When most of the zinc is used up, the battery is dead.', 'Tap the magnifying glass to watch the zinc atoms.'] });
-      add({ id: 'nail', name: 'Brass nail', obj: k.group(k.at(k.cyl(0.05, 0.05, 2.0, k.metal(GOLD, { roughness: 0.25 }), 12), 0, 1.3, 0)), pull: [0, 2.6, 0.6], tagAt: [-0.45, 0.7, 0.3],
+      const powder = grainTex(k, '#141416', ['#232327', '#2e2e33', '#0a0a0b', '#3b3b40'], 2600, 2.2, [3, 2]);
+      add({ id: 'cathode', name: 'Black powder', obj: cutTube(k, 0.48, 0.68, 2.1, 1.5, k.mat(0xffffff, { map: powder, bumpMap: powder, bumpScale: 0.05, roughness: 1, metalness: 0, envMapIntensity: 0.25 })), blockedBy: ['can'], pull: [2.8, 0, -0.4], tagAt: [0.62, 2.25, 0.25],
+        say: 'This black powder is manganese dioxide. It is hungry for electrons!',
+        learn: ['It is packed into a ring pressed against the steel can.', 'It catches the electrons when they come back from their trip around the wire.', 'It is mixed with carbon, like pencil lead, so electricity can move through it easily.'] });
+      add({ id: 'separator', name: 'Paper wall', obj: cutTube(k, 0.45, 0.48, 2.1, 1.5, k.mat(0xffffff, { map: fiberTex(k), roughness: 0.95 })), blockedBy: ['cathode'], pull: [-2.2, 0.5, 1.2], tagAt: [0.3, 1.75, 0.55],
+        say: 'This paper wall keeps the zinc paste and the black powder from touching. That is what makes the electrons take the long way.',
+        learn: ['If the two sides touched, the electrons would just jump across inside, and the battery would use itself up without lighting anything.', 'The paper is soaked in a watery liquid. Tiny charged bits can swim through it, but the powders can\'t.'] });
+      const paste = grainTex(k, '#4f555d', ['#a9b0b9', '#cfd5dc', '#3f444a', '#7d848d'], 1800, 1.6, [3, 2]);
+      add({ id: 'anode', name: 'Zinc paste', obj: cutTube(k, 0.06, 0.45, 2.1, 1.5, k.mat(0xffffff, { map: paste, roughness: 0.6, metalness: 0.2, emissive: 0xffffff, emissiveIntensity: 0 })), inside: 'battery-chemistry', blockedBy: ['separator'], pull: [2.2, 0.5, 1.2], tagAt: [0.3, 1.0, 0.25],
+        say: 'This gray paste is full of tiny bits of zinc metal. Zinc gives away electrons!',
+        learn: ['When the loop is closed, zinc lets go of electrons. They rush out through the brass nail and the wire.', 'As zinc gives away electrons it turns into zinc oxide, a white powder. Watch the paste get paler as the battery runs.', 'Tap Look inside to watch the zinc atoms do it.'] });
+      add({ id: 'nail', name: 'Brass nail', obj: k.group(k.at(k.cyl(0.05, 0.05, 2.0, k.metal(GOLD, { roughness: 0.25 }), 12), 0, 1.3, 0)), pull: [0, 2.6, 0.6], tagAt: [-0.35, 0.6, 0.35],
         say: 'The brass nail collects electrons from the zinc and sends them down to the minus end.',
-        learn: ['Brass is a mix of copper and zinc. It carries electricity well and does not rust.'] });
+        learn: ['Brass is a mix of copper and zinc. It carries electricity well and doesn\'t rust.'] });
       const bulbMat = k.glow(0xfff6d8, 0xffe9a0); bulbMat.transparent = true; bulbMat.opacity = 0.85;
-      const wirePts = [[0, 0.22, 0.2], [0.9, 0.15, 0.6], [1.7, 0.6, 0.6], [1.8, 2.2, 0.6], [1.6, 3.15, 0.5], [0.8, 3.25, 0.25], [0, 2.9, 0.1]];
-      add({ id: 'circuit', name: 'Wire and bulb', obj: k.group(k.tube(wirePts, 0.03, k.mat(0xc0392b, { roughness: 0.5 })), k.at(k.sphere(0.22, bulbMat, 20), 1.8, 2.4, 0.6)), pull: [1.6, 0, 1.4], tagAt: [2.3, 2.8, 0.6],
-        say: 'This wire and little bulb make a loop. Electrons flow out of the minus end, through the bulb, and back in the top.',
-        learn: ['No loop, no flow. That is why a switch works: it opens and closes the loop.'] });
+      const wirePts = [[0, 0.22, 0.2], [0.9, 0.15, 0.9], [1.7, 0.6, 0.9], [1.8, 2.2, 0.9], [1.6, 3.15, 0.6], [0.8, 3.25, 0.25], [0, 2.9, 0.1]];
+      add({ id: 'circuit', name: 'Wire and bulb', obj: k.group(k.tube(wirePts, 0.03, k.mat(0xc0392b, { roughness: 0.5 })), k.at(k.sphere(0.22, bulbMat, 20), 1.8, 2.4, 0.9)), pull: [1.6, 0, 1.4], tagAt: [2.3, 2.85, 0.9],
+        say: 'This wire and little bulb make a loop from the minus end back to the plus end.',
+        learn: ['No loop, no flow. That is why a switch works: it opens and closes the loop.', 'Pull the wire off and watch: the electrons stop, inside and out.'] });
+      // electrons outside, and their trip inside: paste -> nail -> bottom; top -> can -> powder; ions across the paper
       const flow = k.flow(wirePts, { count: 22, color: BLUE, size: 0.2 });
-      const glowB = halo(k, 1.8, 2.4, 0.6);
-      root.add(flow, glowB);
-      return { root, parts, refs: { flow, bulbMat, glowB } };
+      const inner = [];
+      [0.85, 1.45, 2.05].forEach((y, i) => inner.push(k.flow([[0.42, y, 0.06], [0.08, y - 0.1, 0.06], [0.08, 0.36, 0.06]], { count: 5, color: BLUE, size: 0.14, phase: i / 3 })));
+      [0.9, 1.5, 2.1].forEach((y, i) => inner.push(k.flow([[0.18, 2.88, 0.06], [0.72, 2.66, 0.06], [0.72, y, 0.06], [0.53, y, 0.06]], { count: 5, color: BLUE, size: 0.14, phase: i / 3 })));
+      const ions = [0.8, 1.2, 1.6, 2.0, 2.4].map((y, i) => k.flow([[0.06, y, 0.64], [0.06, y, 0.32]], { count: 2, color: 0xff5a4a, size: 0.12, phase: i / 5 }));
+      const glowB = halo(k, 1.8, 2.4, 0.9);
+      // Zinc left meter
+      const meter = k.group(), bg = k.at(k.box(0.26, 1.6, 0.06, k.mat(0x202430, { roughness: 0.8 })), 0, 0.8, 0);
+      const fillMat = new T.MeshBasicMaterial({ color: 0x3ee08f, toneMapped: false }), fill = k.mesh(new T.BoxGeometry(0.2, 1.54, 0.08), fillMat);
+      fill.position.y = 0.8; meter.add(bg, fill); meter.position.set(-1.45, 0.5, 0.4);
+      meter.traverse((o) => { o.userData.noPick = true; });
+      const mLab = k.label('Zinc left', { size: 0.15 }); mLab.position.set(-1.45, 2.55, 0.4);
+      const dead = k.label('Battery dead! Power off and on for a new one', { size: 0.15, bg: 'rgba(200,40,30,0.92)' }); dead.position.set(0, 3.55, 0); dead.visible = false;
+      root.add(flow, ...inner, ...ions, glowB, meter, mLab, dead);
+      return { root, parts, refs: { flow, inner, ions, bulbMat, glowB, fill, fillMat, dead, zinc: 1, wasOn: false, told: false } };
     },
     evaluate(has, on) {
       const ok = ['can', 'plusCap', 'cathode', 'separator', 'anode', 'nail', 'circuit'].every(has);
       return { alive: on && ok, reason: on && !ok ? 'The battery needs all its parts to push the electrons around the loop.' : '' };
     },
-    apply(out, inst) { inst.byId.circuit.meshes[1].material.emissiveIntensity = out.alive ? 2.5 : 0; show([inst.refs.flow, inst.refs.glowB], out.alive); },
-    tick(dt, t, inst, out) { if (out && out.alive) upd([inst.refs.flow], dt, 0.12); },
+    apply(out, inst) { const r = inst.refs; show([r.flow, r.glowB, ...r.inner, ...r.ions], out.alive && r.zinc > 0); },
+    tick(dt, t, inst, out, on) {
+      const r = inst.refs;
+      if (on && !r.wasOn && r.zinc <= 0) { r.zinc = 1; r.told = false; TAL.say('A fresh battery, full of zinc! Off we go.'); }
+      r.wasOn = !!on;
+      const running = !!(out && out.alive) && r.zinc > 0;
+      if (running) {
+        r.zinc = Math.max(0, r.zinc - dt / 50);
+        upd([r.flow], dt, 0.12); upd(r.inner, dt, 0.25); upd(r.ions, dt, 0.18);
+        if (r.zinc <= 0 && !r.told) { r.told = true; TAL.say('The zinc is all used up. There are no more electrons to give, so the battery is dead! The bulb goes out.'); }
+      }
+      show([r.flow, r.glowB, ...r.inner, ...r.ions], running);
+      inst.byId.circuit.meshes[1].material.emissiveIntensity = running ? 2.5 : 0;
+      r.fill.scale.y = Math.max(0.001, r.zinc); r.fill.position.y = 0.03 + 0.77 * r.zinc;
+      r.fillMat.color.setHex(r.zinc > 0.5 ? 0x3ee08f : r.zinc > 0.2 ? 0xffc23a : 0xff5a4a);
+      r.dead.visible = r.zinc <= 0;
+      inst.byId.anode.meshes.forEach((m) => { m.material.emissiveIntensity = 0.55 * (1 - r.zinc); });
+    },
   });
 
   world({
     id: 'battery-chemistry', name: 'Zinc atoms at work', zoom: '1,000,000×', short: 'chemistry',
-    view: view(1.2, 2.9, 2.9),
-    intro: 'A million times bigger! Gray zinc atoms on the left give away blue electrons. Red bits carry charge through the paper wall from the black powder on the right.',
-    shellSay: 'These are atoms inside the battery: zinc on the left, manganese dioxide on the right.',
+    view: view(1.5, 4.4, 4.8, 0, 0.22),
+    intro: 'A million times bigger! Silver zinc atoms on the left, black powder molecules on the right, and the paper wall between. Watch it happen one step at a time: the sign at the top tells you each step.',
+    learn: [
+      '1. A zinc atom lets go of 2 blue electrons. 2. They travel around the outside wire and light the bulb. 3. A black powder molecule on the other side catches them.',
+      '4. Catching electrons makes the black powder molecule spit out a charged bit called hydroxide: a red oxygen and a white hydrogen stuck together. It swims through the paper wall. 5. It grabs the zinc atom, which becomes zinc oxide, the white ball. That zinc is used up.',
+      'The electrons go one way around the outside, and the hydroxide goes the other way through the inside. That is a full loop, and it keeps going until every zinc atom has turned white.',
+    ],
+    shellSay: 'These are atoms inside the battery: zinc on the left, black powder on the right.',
     build(k) {
       const root = k.group(), parts = [], add = (s) => parts.push(part(k, root, s));
-      const zn = k.metal(0x9aa0aa, { roughness: 0.35 }), mn = k.mat(0x2a2a30, { roughness: 0.7 });
-      const left = lattice(k, 3, 3, 3, 0.62, 0.4, () => ({ r: 0.24, mat: zn }), null); left.position.x = -1.5;
-      const right = lattice(k, 3, 3, 3, 0.62, 0.4, (i, j, l) => ((i + j + l) % 2 ? { r: 0.16, mat: k.mat(0xc0392b, { roughness: 0.5 }) } : { r: 0.24, mat: mn }), null); right.position.x = 1.5;
+      const zn = k.metal(0xc5ccd6, { roughness: 0.22 });
+      const left = lattice(k, 3, 3, 3, 0.58, 0.45, () => ({ r: 0.24, mat: zn }), null); left.position.x = -1.5;
+      // manganese dioxide: a dark manganese atom with two red oxygens
+      const right = k.group(), mnMat = k.mat(0x1e1b1c, { roughness: 0.55 }), oMat = k.mat(0xe0453a, { roughness: 0.45 });
+      const mols = [];
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) for (let l = 0; l < 3; l++) {
+        const g = k.group(k.sphere(0.2, mnMat, 18), k.at(k.sphere(0.11, oMat, 12), 0.2, 0.08, 0), k.at(k.sphere(0.11, oMat, 12), -0.2, -0.08, 0));
+        g.position.set(1.5 + (i - 1) * 0.58, 0.45 + j * 0.58, (l - 1) * 0.58); g.rotation.y = (i + j + l) * 0.9;
+        right.add(g); if (l === 2) mols.push(g);
+      }
+      const front = left.children.filter((m, idx) => idx % 3 === 2).sort((a, b) => b.position.x - a.position.x || b.position.y - a.position.y);
       root.add(left, right);
-      add({ id: 'zinc', name: 'Zinc atom', fixed: true, obj: k.group(k.at(k.sphere(0.28, k.metal(0xc5ccd6, { roughness: 0.2 }), 24), -0.88, 1.64, 0.62)), tagAt: [-0.88, 2.15, 0.62],
-        say: 'These gray balls are zinc atoms. Each one is ready to give away 2 electrons.',
-        learn: ['When a zinc atom gives its electrons away, it joins up with oxygen and becomes zinc oxide.', 'That change is the battery being used up. A dead battery is mostly zinc oxide on this side.'] });
-      add({ id: 'mno2', name: 'Manganese dioxide', fixed: true, obj: k.group(k.at(k.sphere(0.27, k.mat(0x3a3a44, { roughness: 0.5 }), 24), 0.88, 1.64, 0.62)), tagAt: [1.1, 2.15, 0.62],
-        say: 'The dark balls are manganese dioxide. They catch the electrons when they come back around the loop.',
-        learn: ['Catching electrons changes it into a slightly different chemical. Both sides change as the battery works.'] });
-      const sepMat = k.mat(0xe8dcc0, { transparent: true, opacity: 0.45, roughness: 0.9, side: T.DoubleSide, depthWrite: false });
-      add({ id: 'wall', name: 'Paper wall', fixed: true, obj: k.group(k.at(k.box(0.06, 2.0, 2.0, sepMat), 0, 1.0, 0)), tagAt: [0, 2.3, 0],
-        say: 'The paper wall keeps the zinc and the black powder apart, but lets tiny charged bits through.',
-        learn: ['The red bits crossing it are called hydroxide. Each is an oxygen and a hydrogen stuck together, carrying an extra electron.', 'Their trip inside balances the electrons going around the outside wire, so the loop keeps going.'] });
-      const out1 = [0, 0.33, 0.66].map((ph, i) => k.flow([[-1.5, 1.0 + i * 0.3, 0.3], [-1.2, 2.1, 0.3], [-1.3, 3.0, 0.3]], { count: 4, color: BLUE, size: 0.15, phase: ph }));
-      const in1 = [0, 0.5].map((ph) => k.flow([[1.3, 3.0, 0.3], [1.2, 2.1, 0.3], [1.5, 1.2, 0.3]], { count: 4, color: BLUE, size: 0.15, phase: ph }));
-      const ions = [0, 0.25, 0.5, 0.75].map((ph, i) => k.flow([[1.1, 0.6 + i * 0.35, -0.3], [0, 0.7 + i * 0.35, -0.3], [-1.0, 0.6 + i * 0.35, -0.3]], { count: 3, color: 0xff5a4a, size: 0.13, phase: ph }));
-      const t1 = k.label('Electrons out to the wire', { size: 0.15 }); t1.position.set(-1.3, 3.25, 0.3);
-      const t2 = k.label('Back from the wire', { size: 0.15 }); t2.position.set(1.3, 3.25, 0.3);
-      root.add(...out1, ...in1, ...ions, t1, t2);
-      return { root, shell: [left, right], parts, refs: { flows: out1.concat(in1, ions) } };
+      add({ id: 'zinc', name: 'Zinc atom', fixed: true, obj: k.group(), tagAt: [-1.5, 2.15, 0.9],
+        say: 'These silver balls are zinc atoms. Each one is ready to give away 2 electrons.',
+        learn: ['Giving away electrons is what makes the electricity. The zinc is the fuel.', 'After it gives them away, the zinc atom joins up with hydroxide and turns into zinc oxide, the white ball. A dead battery is full of zinc oxide.'] });
+      add({ id: 'mno2', name: 'Black powder', fixed: true, obj: k.group(), tagAt: [1.5, 2.15, 0.9],
+        say: 'Each of these is a black powder molecule: a dark manganese atom holding two red oxygen atoms. Its name is manganese dioxide.',
+        learn: ['It catches the electrons when they come back around the wire.', 'Catching them makes it push out hydroxide, the little red and white pair that swims across to the zinc.'] });
+      const sepMat = k.mat(0xefe4c8, { transparent: true, opacity: 0.4, roughness: 0.9, side: T.DoubleSide, depthWrite: false });
+      add({ id: 'wall', name: 'Paper wall', fixed: true, obj: k.group(k.at(k.box(0.06, 1.9, 1.9, sepMat), 0, 1.03, 0)), tagAt: [0, 2.2, 0.95],
+        say: 'The paper wall keeps the zinc and the black powder apart. Electrons can\'t cross it, but hydroxide can swim through.',
+        learn: ['Because electrons can\'t cross here, they have to go the long way around the outside wire. That trip is the electricity we use.'] });
+      // the outside wire, arching over the top, with a bulb
+      const arch = [[-1.5, 2.1, 0.6], [-1.5, 3.1, 0.6], [-0.7, 3.65, 0.6], [0, 3.75, 0.6], [0.7, 3.65, 0.6], [1.5, 3.1, 0.6], [1.5, 2.1, 0.6]];
+      const bulbMat = k.glow(0xfff6d8, 0xffe9a0);
+      add({ id: 'wire', name: 'Outside wire', fixed: true, obj: k.group(k.tube(arch, 0.035, k.mat(0xc0392b, { roughness: 0.5 })), k.at(k.sphere(0.2, bulbMat, 18), 0, 3.75, 0.6)), tagAt: [0.75, 4.05, 0.6],
+        say: 'This is the wire and bulb outside the battery. The electrons light the bulb on their way around.' });
+      const glowB = halo(k, 0, 3.75, 0.6, 0xffe9a0, 1.2);
+      const dot = (r, c) => { const m = k.mesh(new T.SphereGeometry(r, 12, 8), new T.MeshBasicMaterial({ color: c, toneMapped: false })); m.userData.noPick = true; m.visible = false; return m; };
+      const e1 = dot(0.13, 0x4fb6ff), e2 = dot(0.13, 0x4fb6ff);
+      const oh = k.group(k.sphere(0.16, k.mat(0xe0453a, { emissive: 0xe0453a, emissiveIntensity: 0.5 }), 14), k.at(k.sphere(0.1, k.mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.4 }), 12), 0.19, 0.07, 0)); oh.visible = false; oh.traverse((o) => { o.userData.noPick = true; });
+      const steps = ['1. Zinc lets go of 2 electrons', '2. They zip around the wire and light the bulb', '3. The black powder catches them', '4. Hydroxide swims through the paper wall', '5. Zinc + hydroxide = zinc oxide. Used up!', 'All the zinc is used up. The battery is dead!', 'Power is off: no loop, so nothing happens'].map((s, i) => {
+        const l = k.label(s, { size: 0.17, bg: i >= 5 ? 'rgba(200,40,30,0.92)' : 'rgba(30,110,190,0.92)' }); l.position.set(0, 4.35, 0.6); l.visible = false; return l;
+      });
+      const leg1 = k.label('Blue dot = electron', { size: 0.16 }); leg1.position.set(-1.6, -0.15, 1.1);
+      const leg2 = k.label('Red + white = hydroxide', { size: 0.16 }); leg2.position.set(1.6, -0.15, 1.1);
+      root.add(glowB, e1, e2, oh, ...steps, leg1, leg2);
+      return { root, shell: [left, right], parts, refs: { front, mols, e1, e2, oh, steps, glowB, bulbMat, arch, t: 0, idx: 0, cloned: false } };
     },
     evaluate(has, on) { return { alive: on }; },
-    apply(out, inst) { show(inst.refs.flows, out.alive); },
-    tick(dt, t, inst, out) { if (out && out.alive) upd(inst.refs.flows, dt, 0.18); },
+    tick(dt, t, inst, out) {
+      const r = inst.refs, on = !!(out && out.alive), V = T.Vector3;
+      if (!r.cloned) { r.cloned = true; r.front.forEach((m) => { m.material = m.material.clone(); }); r.mols.forEach((g) => { g.children[0].material = g.children[0].material.clone(); }); }
+      const showStep = (i) => r.steps.forEach((l, n) => { l.visible = n === i; });
+      const hide = () => { r.e1.visible = r.e2.visible = r.oh.visible = false; r.glowB.visible = false; r.bulbMat.emissiveIntensity = 0; };
+      if (!on) { hide(); showStep(6); return; }
+      const CYC = 6.5, n = r.front.length;
+      if (r.idx >= n) {
+        hide(); showStep(5); r.t += dt;
+        if (r.t > 4) { r.t = 0; r.idx = 0; r.front.forEach((m) => { m.material.color.setHex(0xc5ccd6); m.material.emissive.setHex(0x000000); m.material.metalness = 0.8; m.scale.setScalar(1); }); }
+        return;
+      }
+      r.t += dt;
+      const z = r.front[r.idx], zp = new V(), mol = r.mols[r.idx % r.mols.length], mp = new V();
+      z.getWorldPosition(zp); mol.getWorldPosition(mp); inst.root.worldToLocal(zp); inst.root.worldToLocal(mp);
+      const along = (pts, f) => { const segs = pts.length - 1, x = Math.min(segs - 1e-6, f * segs), i = Math.floor(x), u = x - i; return new V().fromArray(pts[i]).lerp(new V().fromArray(pts[i + 1]), u); };
+      const s = r.t, lerp = (a, b, f) => a.clone().lerp(b, Math.min(1, Math.max(0, f)));
+      const start = new V().fromArray(r.arch[0]), end = new V().fromArray(r.arch[r.arch.length - 1]);
+      let lit = false;
+      z.material.emissive.setHex(s < 1.3 ? 0x335577 : 0x000000);
+      mol.children[0].material.emissive.setHex(s > 3.3 && s < 4.0 ? 0x553300 : 0x000000);
+      if (s < 1.3) { showStep(0); const f = s / 1.3; r.e1.position.copy(lerp(zp, start, f)).y += 0.1; r.e2.position.copy(lerp(zp, start, f)).y -= 0.1; r.e1.visible = r.e2.visible = true; r.oh.visible = false; }
+      else if (s < 3.3) { showStep(1); const f = (s - 1.3) / 2; r.e1.position.copy(along(r.arch, f)); r.e2.position.copy(along(r.arch, Math.max(0, f - 0.06))); r.e1.visible = r.e2.visible = true; lit = true; }
+      else if (s < 4.0) { showStep(2); const f = (s - 3.3) / 0.7; r.e1.position.copy(lerp(end, mp, f)); r.e2.position.copy(lerp(end, mp, f - 0.15)); r.e1.visible = r.e2.visible = f < 1; }
+      else if (s < 5.6) { showStep(3); r.e1.visible = r.e2.visible = false; const f = (s - 4.0) / 1.6; r.oh.position.copy(lerp(mp, zp, f)); r.oh.visible = true; }
+      else { showStep(4); r.oh.visible = false; const f = (s - 5.6) / 0.9; z.material.color.copy(new T.Color(0xc5ccd6).lerp(new T.Color(0xffffff), f)); z.material.metalness = 0.8 * (1 - f); z.scale.setScalar(1 + 0.15 * f); }
+      r.glowB.visible = lit; r.bulbMat.emissiveIntensity = lit ? 2.4 : 0;
+      if (s >= CYC) { r.t = 0; z.material.color.setHex(0xffffff); z.material.metalness = 0; r.idx++; }
+    },
   });
 
   // =====================================================================  capacitor
@@ -583,8 +694,8 @@
   // =====================================================================  LCD
   world({
     id: 'lcd-pixel', name: 'One pixel', zoom: '100×', short: 'pixel',
-    view: view(1.5, 2.8, 3.6, -0.55, 0.3),
-    intro: 'This is one pixel of the screen, 100 times bigger, pulled apart into its layers. White light comes up from the bottom and each layer changes it. Watch the three colors mix!',
+    view: view(1.6, 3.4, 4.2, -0.4, 0.3),
+    intro: 'This is one pixel of the screen, 100 times bigger, pulled apart into its layers. White light comes up from the bottom and each layer changes it. The square on the right shows what you would see. Pull a layer off and watch what happens to it!',
     shellSay: 'This is one pixel, stretched apart so you can see every layer.',
     build(k) {
       const root = k.group(), parts = [], add = (s) => parts.push(part(k, root, s));
@@ -595,11 +706,13 @@
         say: 'White light shines up from the LED lights behind the screen.' });
       add({ id: 'rearPol', name: 'Back polarizer', obj: k.group(plate(0.65, { map: lines(true), color: 0xdfe6f2 })), blockedBy: ['tft'], pull: [-3.4, 0, 0], tagAt: [-1.7, 0.65, 0.7],
         say: 'This filter only lets light wiggling one way through.',
+        breaks: 'Now the light wiggles every which way, and the liquid crystal cannot control it. The pixel is stuck bright white. No picture!',
         learn: ['Light wiggles as it travels. This sheet is like a fence with slots that only lets one direction of wiggle pass.', 'Some sunglasses have this kind of filter too. That is how they cut glare.'] });
       const tft = k.group(plate(1.05, { color: 0xd8f0ff }));
       [-0.8, 0, 0.8].forEach((x) => tft.add(k.at(k.box(0.12, 0.08, 0.12, k.metal(GOLD)), x - 0.25, 1.1, -0.5)));
       add({ id: 'tft', name: 'Switch glass', obj: tft, blockedBy: ['lc'], pull: [3.4, 0, 0], tagAt: [1.75, 1.05, 0.7],
         say: 'This glass has a tiny switch for each color dot.',
+        breaks: 'No switches, so nothing tells the dots how bright to be. Stuck white. No picture!',
         learn: ['Each switch sends just the right amount of electricity to its dot.', 'They are thin film transistors. A 4K TV has about 25 million of them!'] });
       const lc = k.group();
       [-0.8, 0, 0.8].forEach((x) => {
@@ -608,25 +721,32 @@
       });
       add({ id: 'lc', name: 'Liquid crystal', obj: lc, inside: 'liquid-crystal', blockedBy: ['filter'], pull: [-3.4, 0.2, 0.4], tagAt: [-1.75, 1.45, 0.7],
         say: 'The liquid crystal twists the light, a little or a lot.',
+        breaks: 'Nothing is left to turn the light, so every dot looks the same. Stuck white. No picture!',
         learn: ['With no electricity its molecules twist the light so it can get through. With electricity they straighten up and block it.', 'By setting each dot somewhere in between, the TV makes every shade.', 'Tap the magnifying glass to see the molecules.'] });
       const filter = k.group();
       [[-0.8, 0xff3030], [0, 0x30ff60], [0.8, 0x3060ff]].forEach(([x, c]) => filter.add(k.at(k.box(0.75, 0.06, 1.3, k.mat(c, { transparent: true, opacity: 0.75, roughness: 0.3, emissive: c, emissiveIntensity: 0.25 })), x, 1.85, 0)));
       add({ id: 'filter', name: 'Color filter', obj: filter, blockedBy: ['frontPol'], pull: [3.4, 0.2, 0.4], tagAt: [1.75, 1.85, 0.7],
         say: 'Red, green and blue windows color the light.',
+        breaks: 'No more colors! The picture is only black, white and grey.',
         learn: ['Every color on a TV is a mix of just these three. Red and green light together look yellow!', 'Each little window is called a subpixel. Three of them make one pixel.'] });
-      add({ id: 'frontPol', name: 'Front polarizer', obj: k.group(plate(2.25, { map: lines(false), color: 0xdfe6f2 })), pull: [0, 1.6, 0], tagAt: [-1.7, 2.25, 0.7],
+      add({ id: 'frontPol', name: 'Front polarizer', obj: k.group(plate(2.25, { map: lines(false), color: 0xdfe6f2 })), pull: [-3.2, 0.9, -0.6], tagAt: [-1.7, 2.25, 0.7],
         say: 'The last filter, turned the other way, decides how much light gets out.',
+        breaks: 'Now nothing stops the light. Every dot shines at full blast, so the pixel is stuck bright white. No picture!',
         learn: ['Light only gets out if the liquid crystal twisted it to line up with this filter.', 'Without it, you would see the backlight shining but no picture at all.'] });
       const low = [], high = [], cols = [0xff3030, 0x30ff60, 0x3060ff];
       [-0.8, 0, 0.8].forEach((x, i) => {
         low.push(k.flow([[x, 0.3, 0.2], [x, 1.85, 0.2]], { count: 6, color: 0xfff8ee, size: 0.16, phase: i / 3 }));
         high.push(k.flow([[x, 1.9, 0.2], [x, 3.1, 0.2]], { count: 4, color: cols[i], size: 0.2, phase: i / 3 }));
       });
-      const mixMat = new T.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
-      const mix = k.at(k.mesh(new T.SphereGeometry(0.28, 24, 16), mixMat), 0, 3.5, 0); mix.userData.noPick = true;
-      const mixTag = k.label('The color you see', { size: 0.15 }); mixTag.position.set(0, 3.95, 0);
-      root.add(...low, ...high, mix, mixTag);
-      return { root, parts, refs: { low, high, mixMat, cols } };
+      // what you'd see: one pixel, as a square, plus a sign saying what's going on
+      const mixMat = new T.SpriteMaterial({ color: 0xffffff, toneMapped: false });
+      const mix = new T.Sprite(mixMat); mix.scale.set(0.9, 0.9, 1); mix.position.set(2.55, 2.0, -0.2); mix.userData.noPick = true;
+      const frame = new T.Sprite(new T.SpriteMaterial({ color: 0x555a66, toneMapped: false })); frame.scale.set(1.03, 1.03, 1); frame.position.set(2.55, 2.0, -0.22); frame.userData.noPick = true;
+      const mixTag = k.label('What you see', { size: 0.15 }); mixTag.position.set(2.55, 2.65, -0.2);
+      const status = [['A picture: the color keeps changing', 'rgba(30,140,80,0.92)'], ['Stuck bright white: no picture!', 'rgba(200,40,30,0.92)'], ['No colors: only black, white and grey', 'rgba(170,120,0,0.92)'], ['Power is off', 'rgba(60,60,70,0.92)']]
+        .map(([txt, bg]) => { const l = k.label(txt, { size: 0.15, bg }); l.position.set(2.55, 1.3, -0.2); l.visible = false; return l; });
+      root.add(...low, ...high, frame, mix, mixTag, ...status);
+      return { root, parts, refs: { low, high, mixMat, cols, status } };
     },
     evaluate(has, on) {
       return { alive: on, block: has('rearPol') && has('frontPol') && has('lc') && has('tft'), color: has('filter') };
@@ -639,6 +759,8 @@
       r.high.forEach((f, i) => { const c = new T.Color(out && out.color ? r.cols[i] : 0xffffff).multiplyScalar(lvl[i]); f.material.color.copy(c); });
       const mixC = out && out.color ? new T.Color(lvl[0], lvl[1], lvl[2]) : new T.Color(1, 1, 1).multiplyScalar((lvl[0] + lvl[1] + lvl[2]) / 3);
       r.mixMat.color.copy(on ? mixC : new T.Color(0.08, 0.08, 0.1));
+      const st = !on ? 3 : !(out && out.block) ? 1 : !(out && out.color) ? 2 : 0;
+      r.status.forEach((l, i) => { l.visible = i === st; });
     },
   });
 
