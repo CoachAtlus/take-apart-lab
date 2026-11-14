@@ -372,8 +372,96 @@
     },
   });
 
+  // Glowing light dots we move by hand (flows can't stop partway, these can).
+  const lightDots = (k, root, n, color, size) => Array.from({ length: n }, () => {
+    const m = k.mesh(new T.SphereGeometry(size || 0.09, 12, 8), new T.MeshBasicMaterial({ color, toneMapped: false }));
+    m.userData.noPick = true; root.add(m); return m;
+  });
+
+  // =====================================================================  polarizer
+  world({
+    id: 'polarizer-inside', name: 'Inside a polarizer', zoom: '10,000×', short: 'polarizer',
+    view: view(1.2, 4.3, 5.2, -0.9, 0.3),
+    intro: 'This is a polarizer, 10,000 times bigger. Light wiggles as it travels. The blue light wiggles up and down. The yellow light wiggles side to side. Watch which one gets through! Then pull the long chains out and see what happens.',
+    shellSay: 'A polarizer sheet, seen from the side, with light going through it.',
+    build(k) {
+      const root = k.group(), parts = [], add = (s) => parts.push(part(k, root, s));
+      const chains = k.group(), chainMat = k.mat(0xe8e2f0, { roughness: 0.5 }), iodine = k.mat(0x5a2a7a, { roughness: 0.4 });
+      for (let r = 0; r < 9; r++) for (const x of [-0.07, 0.07]) {
+        const y = 0.3 + r * 0.24;
+        chains.add(k.at(k.rot(k.cyl(0.03, 0.03, 2.1, chainMat, 8), Math.PI / 2, 0, 0), x, y, 0));
+        for (let d = 0; d < 7; d++) chains.add(k.at(k.sphere(0.045, iodine, 8), x, y, -0.9 + d * 0.3));
+      }
+      add({ id: 'chains', name: 'Long chains', obj: chains, blockedBy: ['films'], pull: [0, 0, -3.2], tagAt: [0, 2.55, -1.1],
+        say: 'Long plastic chains, all stretched to point the same way, with purple iodine stuck along them.',
+        learn: ['Light that wiggles along the chains gets soaked up by them. Light that wiggles across the chains slips through the gaps.', 'Makers stretch the plastic like taffy so every chain lines up. Then they dip it in iodine, which does the soaking up.', 'The light that gets through is called polarized light. Your screen needs two of these sheets, turned different ways, to make a picture.'] });
+      const filmMat = k.mat(0xdff3ff, { transparent: true, opacity: 0.3, roughness: 0.2, depthWrite: false });
+      add({ id: 'films', name: 'Clear covers', obj: k.group(k.at(k.box(0.06, 2.4, 2.4, filmMat), -0.22, 1.25, 0), k.at(k.box(0.06, 2.4, 2.4, filmMat), 0.22, 1.25, 0)), pull: [0, 3.0, 0], tagAt: [0.25, 2.75, 0.9],
+        say: 'Two clear covers keep water and scratches away from the chains.',
+        learn: ['The chains are delicate. Water makes them lose their line, and then the filter stops working.', 'One of these is peeled off in the factory so the sheet can be glued onto the glass.'] });
+      const inLab = k.label('Light comes in', { size: 0.15 }); inLab.position.set(-2.4, 2.35, 0);
+      const outLab = k.label('Light goes out', { size: 0.15 }); outLab.position.set(2.4, 2.35, 0);
+      const vDots = lightDots(k, root, 14, 0x6fc8ff, 0.1), hDots = lightDots(k, root, 14, 0xffd23a, 0.1);
+      const hStop = k.label('Soaked up!', { size: 0.16, bg: 'rgba(120,60,150,0.9)' }); hStop.position.set(0.5, 0.15, -0.55); hStop.visible = false;
+      root.add(inLab, outLab, hStop);
+      return { root, parts, refs: { vDots, hDots, hStop, s: 0 } };
+    },
+    evaluate(has, on) { return { alive: on, filter: has('chains') }; },
+    tick(dt, t, inst, out) {
+      const r = inst.refs, on = out && out.alive, filt = out && out.filter;
+      r.s = (r.s + dt * 0.12) % 1;
+      const place = (dots, vertical) => dots.forEach((m, i) => {
+        const f = (r.s + i / dots.length) % 1, x = -2.6 + f * 5.2, w = 0.32 * Math.sin(x * 5);
+        m.position.set(x, vertical ? 1.25 + w : 1.25, vertical ? 0.55 : -0.55 + w);
+        m.visible = on && !(!vertical && filt && x > 0.05);
+      });
+      place(r.vDots, true); place(r.hDots, false);
+      r.hStop.visible = !!(on && filt);
+    },
+  });
+
+  // =====================================================================  color filter
+  world({
+    id: 'filter-inside', name: 'Inside the color filter', zoom: '1,000×', short: 'color filter',
+    view: view(1.4, 4.2, 5.0, -0.5, 0.35),
+    intro: 'This is the color filter, 1,000 times bigger. White light is really red, green and blue light mixed together. Each colored window only lets its own color through. Try pulling a window out!',
+    shellSay: 'Three colored windows, one for each color dot.',
+    build(k) {
+      const root = k.group(), parts = [], add = (s) => parts.push(part(k, root, s));
+      const COLS = [['red', 0xff3030], ['green', 0x30ff60], ['blue', 0x3060ff]], X = [-1.0, 0, 1.0];
+      const grid = k.group(), black = k.mat(0x111114, { roughness: 0.8 });
+      [-1.5, -0.5, 0.5, 1.5].forEach((x) => grid.add(k.at(k.box(0.12, 0.3, 1.2, black), x, 1.5, 0)));
+      add({ id: 'grid', name: 'Black grid', fixed: true, obj: grid, tagAt: [-1.5, 1.95, 0.6],
+        say: 'Thin black walls sit between the windows so the colors stay crisp.',
+        learn: ['Without them, light would leak from one color into the next and the picture would look washed out.', 'It is called the black matrix. It also soaks up light coming in from the room, so the screen looks darker when it is off.'] });
+      COLS.forEach(([nm, c], i) => {
+        const win = k.at(k.box(0.88, 0.25, 1.2, k.mat(c, { transparent: true, opacity: 0.8, roughness: 0.3, emissive: c, emissiveIntensity: 0.3 })), X[i], 1.5, 0);
+        add({ id: nm, name: nm[0].toUpperCase() + nm.slice(1) + ' window', obj: k.group(win), pull: [X[i] * 1.6, 1.8, 1.2], tagAt: [X[i], 1.9, 0.6],
+          say: `This window is full of ${nm} dye. It soaks up the other colors and only lets ${nm} light through.`,
+          learn: [`Pull it out and that dot lets all the colors through, so it shines white instead of ${nm}.`, 'The dye is printed on in a very thin layer, thinner than a hair.'] });
+      });
+      const dots = [];
+      X.forEach((x, w) => COLS.forEach(([, c], j) => lightDots(k, root, 4, c, 0.08).forEach((m, n) => dots.push({ m, w, j, x: x - 0.25 + j * 0.25, ph: n / 4 }))));
+      const lab = k.label('White light from below', { size: 0.15 }); lab.position.set(0, -0.15, 0.9);
+      root.add(lab);
+      return { root, parts, refs: { dots, s: 0, ids: COLS.map((c) => c[0]) } };
+    },
+    evaluate(has, on) { return { alive: on, win: ['red', 'green', 'blue'].map((id) => has(id)) }; },
+    tick(dt, t, inst, out) {
+      const r = inst.refs, on = out && out.alive;
+      r.s = (r.s + dt * 0.25) % 1;
+      r.dots.forEach((d) => {
+        const f = (r.s + d.ph) % 1, y = f * 3.2;
+        d.m.position.set(d.x, y, 0.15);
+        const blocked = out && out.win && out.win[d.w] && d.w !== d.j && y > 1.4;
+        d.m.visible = !!on && !blocked;
+      });
+    },
+  });
+
   // =====================================================================  which parts open into these worlds
   Object.assign(TAL.insideByName, {
+    'Front polarizer': 'polarizer-inside', 'Back polarizer': 'polarizer-inside', 'Polarizer': 'polarizer-inside', 'Color filter': 'filter-inside',
     'Power cord': 'wire-inside', 'HDMI cable': 'wire-inside', 'Picture cable': 'wire-inside', 'Power wires': 'wire-inside', 'Speaker wire': 'wire-inside',
     'High-voltage wire': 'wire-inside', 'Ribbon cable': 'wire-inside', 'Gold wire': 'wire-inside', 'Wire and bulb': 'wire-inside', 'Copper strands': 'copper-atoms',
     'Screw': 'screw-inside', 'Resistor': 'resistor-inside', 'Fuse': 'fuse-inside', 'Magnet': 'magnet-inside', 'Heat sink': 'heatsink-inside',

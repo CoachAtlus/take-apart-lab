@@ -26,7 +26,7 @@ Sparky, a talking robot, walks the kid through each device step by step: a glowi
 
 ## Going deeper
 
-- **Look inside:** tap the **Look inside** button and everything with an inside glows blue and gets a tag. Tap one to shrink down inside it (or touch a part and tap its floating magnifying glass). There are 27 worlds, several levels deep, for example:
+- **Look inside:** tap the **Look inside** button and everything with an inside glows blue and gets a tag. Tap one to shrink down inside it (or touch a part and tap its floating magnifying glass). There are 29 worlds, several levels deep, for example:
   - LED light > LED (20x) > LED chip (1,000x) > atoms making light (1,000,000x)
   - processor chip (10x) > the silicon (100x) > one transistor (1,000,000x) > silicon atoms (100,000,000x)
 - Others: wire > copper atoms, screw, resistor, fuse (watch the wire melt), magnet, heat sink, switch, circuit board, diode, battery and its chemistry, capacitor and its plates, LCD pixel and liquid crystal, speaker, transformer, and the picture tube and its phosphor dots.
