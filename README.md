@@ -20,10 +20,22 @@ Sparky, a talking robot, walks the kid through each device step by step: a glowi
 - Keys: `P` power, `C` channel, `X` x-ray, `Esc` back to devices.
 - Link straight to a device with `index.html#crt-tv`, `#led-tv`, or `#flashlight`.
 
+## Going deeper
+
+- **Look inside:** touch a part, then tap the blue magnifying glass to shrink down inside it. Worlds go several levels deep, for example:
+  - LED light > LED (20x) > LED chip (1,000x) > atoms making light (1,000,000x)
+  - processor chip (10x) > the silicon (100x) > one transistor (1,000,000x) > silicon atoms (100,000,000x)
+- Others: battery and its chemistry, capacitor and its plates, LCD pixel and liquid crystal, speaker, transformer, and the picture tube and its phosphor dots.
+- The trail at the top shows where you are, and **Back** climbs out one level.
+- **Tell me more:** each tap goes one level deeper: For kids, How it works, How it's built, The science, Deep dive. The deeper levels live in `js/learn.js`, keyed by part name.
+- Drag up or down to look from above or underneath. The table fades away when you look from below.
+
 ## How it's built
 
 - `js/engine.js`: scene, camera, tapping, part animation, sound (all synthesized), speech, TV shows, particles, missions.
 - `js/devices/*.js`: one file per device. Each calls `TAL.registerDevice({...})`.
+- `js/worlds.js`: the zoomed-in worlds (`TAL.registerWorld`, same format as a device, plus `zoom`, `fixed` parts and inline `learn`). `TAL.insideByName` maps part names to worlds; a part can also set `inside: 'world-id'`.
+- `js/learn.js`: deeper explanations (levels 2 to 5) for every part name.
 - three.js r128 as a plain global (`THREE`), so it all works from `file://` with no build step.
 
 ## Add a device

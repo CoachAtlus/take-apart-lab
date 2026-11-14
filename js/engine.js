@@ -7,6 +7,10 @@
   const TAL = (window.TAL = window.TAL || {});
   TAL.devices = TAL.devices || [];
   TAL.registerDevice = (d) => TAL.devices.push(d);
+  // Worlds: zoomed-in scenes inside a part (an LED, a chip, a battery...). Same format as a device.
+  TAL.worlds = TAL.worlds || {};
+  TAL.registerWorld = (d) => { TAL.worlds[d.id] = d; };
+  TAL.insideByName = TAL.insideByName || {}; // part name -> world id
 
   // ---------------------------------------------------------------- utils
   const $ = (s) => document.querySelector(s);
@@ -137,8 +141,60 @@
         }
         geo.computeVertexNormals();
       }
-      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex }));
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
       return { mesh, canvas, buf, ctx: canvas.getContext('2d'), bctx: buf.getContext('2d'), tex, w: pxW, h: pxH };
+    };
+    // Same size as k.box, with softened edges.
+    k.rbox = (w, h, d, m, r) => {
+      r = Math.max(0.002, Math.min(r == null ? 0.03 : r, w / 2 - 0.002, h / 2 - 0.002, d / 2 - 0.002));
+      const sh = new THREE.Shape(), hw = w / 2 - r, hh = h / 2 - r;
+      sh.moveTo(-hw, -hh); sh.lineTo(hw, -hh); sh.lineTo(hw, hh); sh.lineTo(-hw, hh); sh.lineTo(-hw, -hh);
+      const geo = new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.001, d - 2 * r), bevelEnabled: true, bevelSize: r, bevelThickness: r, bevelSegments: 3, curveSegments: 1 });
+      geo.center();
+      return k.mesh(geo, m);
+    };
+    k.woodTex = () => woodTexture();
+    let dot = null;
+    k.dotTex = () => dot || (dot = softDot());
+    // A floating name tag that always faces you (used in the zoomed-in worlds).
+    k.label = (text, o) => {
+      o = o || {};
+      const fs = 46, pad = 20, cv = document.createElement('canvas'), x = cv.getContext('2d');
+      const font = `800 ${fs}px "Baloo 2", "Trebuchet MS", sans-serif`;
+      x.font = font;
+      cv.width = Math.ceil(x.measureText(text).width) + pad * 2; cv.height = Math.round(fs * 1.5);
+      x.font = font;
+      x.fillStyle = o.bg || 'rgba(16,22,35,0.82)'; roundRect(x, 0, 0, cv.width, cv.height, cv.height / 2); x.fill();
+      x.fillStyle = o.color || '#fff8ea'; x.textBaseline = 'middle'; x.fillText(text, pad, cv.height / 2 + 3);
+      const tex = new THREE.CanvasTexture(cv); tex.encoding = THREE.sRGBEncoding;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, toneMapped: false }));
+      const hgt = o.size || 0.2;
+      sp.scale.set((hgt * cv.width) / cv.height, hgt, 1);
+      sp.renderOrder = 20; sp.userData.noPick = true;
+      return sp;
+    };
+    // Glowing dots that travel along a path: electrons, light, magnetism. obj.userData.flow.update(dt, speed).
+    k.flow = (pts, o) => {
+      o = o || {};
+      const curve = new THREE.CatmullRomCurve3(pts.map((q) => new THREE.Vector3(q[0], q[1], q[2])), !!o.closed);
+      const n = o.count || 16, pos = new Float32Array(n * 3), geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const mat = new THREE.PointsMaterial({ size: o.size || 0.14, map: k.dotTex(), color: o.color == null ? 0x58b8ff : o.color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+      const ptsObj = new THREE.Points(geo, mat);
+      ptsObj.frustumCulled = false; ptsObj.userData.noPick = true;
+      const v = new THREE.Vector3();
+      let phase = o.phase || 0;
+      ptsObj.userData.flow = {
+        curve,
+        update(dt, speed) {
+          phase = (phase + dt * (speed == null ? 0.15 : speed)) % 1;
+          if (phase < 0) phase += 1;
+          for (let i = 0; i < n; i++) { curve.getPointAt(((i / n) + phase) % 1, v); pos[i * 3] = v.x; pos[i * 3 + 1] = v.y; pos[i * 3 + 2] = v.z; }
+          geo.attributes.position.needsUpdate = true;
+        },
+      };
+      ptsObj.userData.flow.update(0, 0);
+      return ptsObj;
     };
     return k;
   }
@@ -307,20 +363,44 @@
     "It's on the back. Tap the turn around button!", 'I can talk again!',
     "Hi! I'm Sparky. If you can hear me, we're ready to take things apart!",
   ];
+  const DEPTH = ['For kids', 'How it works', "How it's built", 'The science', 'Deep dive'];
   const Caption = {
-    timer: 0, moreText: '',
+    timer: 0, learn: null, part: null,
     init() {
-      this.el = $('#caption'); this.txt = $('#capText'); this.more = $('#capMore');
-      this.more.addEventListener('click', () => { if (this.moreText) Voice.say(this.moreText); });
+      this.el = $('#caption'); this.txt = $('#capText'); this.more = $('#capMore'); this.depth = $('#capDepth'); this.look = $('#capLook');
+      this.more.addEventListener('click', () => this.deeper());
+      this.look.addEventListener('click', () => { if (this.part) diveInto(this.part); });
       $('#sparky').addEventListener('click', () => { Sound.unlock(); Voice.repeat(); });
     },
+    // more: one extra line (string), or { levels, i } to step deeper one tap at a time
     show(text, more) {
       this.txt.textContent = text;
-      this.moreText = more || '';
-      this.more.hidden = !more;
+      if (typeof more === 'string') more = { levels: [more], i: 0 };
+      this.learn = more && more.levels && more.levels.length ? more : null;
+      this.refresh();
       this.el.classList.add('show');
       clearTimeout(this.timer);
-      this.timer = setTimeout(() => { if (!Voice.talking) this.el.classList.remove('show'); }, Math.max(6000, text.split(' ').length * 450 + 4000));
+      this.timer = setTimeout(() => { if (!Voice.talking) this.el.classList.remove('show'); }, Math.max(8000, text.split(' ').length * 450 + 6000));
+    },
+    setPart(p) { this.part = p || null; this.refresh(); },
+    refresh() {
+      const L = this.learn;
+      this.more.hidden = !(L && L.i < L.levels.length);
+      if (L) {
+        const total = Math.min(5, L.levels.length + 1), at = Math.min(5, L.i + 1);
+        this.depth.hidden = false;
+        this.depth.innerHTML = '';
+        for (let i = 1; i <= total; i++) { const d = document.createElement('i'); if (i <= at) d.className = 'on'; this.depth.append(d); }
+        const lab = document.createElement('span'); lab.textContent = DEPTH[at - 1]; this.depth.append(lab);
+      } else this.depth.hidden = true;
+      this.look.hidden = !(this.part && insideOf(this.part) && App.inst && App.inst.parts.indexOf(this.part) >= 0);
+    },
+    deeper() {
+      const L = this.learn;
+      if (!L || L.i >= L.levels.length) return;
+      const t = L.levels[L.i];
+      L.i++;
+      Voice.say(t, L);
     },
   };
   const Voice = {
@@ -813,10 +893,10 @@
     inst: null, on: false, out: null, channel: 0, xray: false, focus: null,
     yaw: 0, yawT: 0, pitch: 0.2, pitchT: 0.2, zoom: 1, zoomT: 1, R: 4, lift: 0,
     time: 0, lastScreen: 0, hovered: null, seq: 0, mission: null, lastAlive: false,
-    found: {}, wins: store.get('tal-wins', {}), lastShell: -10, lastAct: 0,
+    found: {}, wins: store.get('tal-wins', {}), lastShell: -10, lastAct: 0, stack: [], diving: null, level: 1, shadowT: 0,
   };
   TAL.app = App;
-  let renderer, scene, camera, turntable, raycaster, kit, sparks, smoke, confetti, dotTex, shadowTex;
+  let renderer, scene, camera, turntable, raycaster, kit, sparks, smoke, confetti, dotTex, shadowTex, table, stage, bgDevice, bgWorld, thumbEnv;
   const GLOW = new THREE.Color(0xffc23a);
   const tmpC = new THREE.Color(), tmpQ = new THREE.Quaternion(), tmpQ2 = new THREE.Quaternion(), Y_AXIS = new THREE.Vector3(0, 1, 0), IDENT = new THREE.Quaternion();
   const tgt = new THREE.Vector3(0, 2, 0);
@@ -898,7 +978,21 @@
     Voice.say(putting ? `Wait! Take off the ${names} first, then it can go back in.` : `It's stuck! Take off the ${names} first.`, null, false,
       putting ? 'Wait! Take the glowing part off first, then this can go back in.' : "It's stuck! Take off the glowing part first.");
   }
+  // Deeper explanations: the part's own `learn`, else js/learn.js by name, else its one `fact`.
+  function learnFor(p) {
+    const lv = (p.learn && p.learn.length ? p.learn : null) || (TAL.learn && TAL.learn[p.name]) || (p.fact ? [p.fact] : []);
+    return lv.length ? { levels: lv, i: 0 } : null;
+  }
+  // Fixed parts (in the zoomed-in worlds) don't come off; touching them explains them.
+  function explain(p) {
+    p.pulse = 1.2;
+    discover(p);
+    Sound.click();
+    Voice.say(p.say, learnFor(p));
+    Caption.setPart(p);
+  }
   function tryRemove(p, o) {
+    if (p.fixed) { if (!(o && o.quiet)) explain(p); return false; }
     const blockers = blockersOf(p);
     if (blockers.length) { if (!(o && o.quiet)) blocked(p, blockers, false); return false; }
     removePart(p, o);
@@ -925,7 +1019,8 @@
     if (zapped) { sparkAt(p); Sound.zap(); }
     if (!o.quiet) {
       const showBreak = p.breaks && before.alive && (changed || p.breaksAlways);
-      Voice.say(showBreak ? `${p.say} ${p.breaks}` : p.say, p.fact, false, showBreak ? [p.say, p.breaks] : p.say);
+      Voice.say(showBreak ? `${p.say} ${p.breaks}` : p.say, learnFor(p), false, showBreak ? [p.say, p.breaks] : p.say);
+      Caption.setPart(p);
     }
     if (!o.noGuide) Guide.advance();
   }
@@ -1012,13 +1107,13 @@
   function explodeAll() {
     const inst = App.inst, token = ++App.seq;
     exitFocus();
-    if (!inst.parts.some((p) => p.target === 0)) return fixAll();
+    if (!inst.parts.some((p) => p.target === 0 && !p.fixed)) return fixAll();
     const removed = new Set(inst.parts.filter(isOut).map((p) => p.id)), order = [];
     const isIn = (q) => !removed.has(q.id);
     let progress = true;
     while (progress) {
       progress = false;
-      for (const p of inst.parts) if (!removed.has(p.id) && blockersOf(p, isIn).length === 0) { order.push(p); removed.add(p.id); progress = true; }
+      for (const p of inst.parts) if (!p.fixed && !removed.has(p.id) && blockersOf(p, isIn).length === 0) { order.push(p); removed.add(p.id); progress = true; }
     }
     const gap = clamp(5500 / Math.max(1, order.length), 28, 170);
     order.forEach((p, i) => setTimeout(() => { if (token === App.seq && p.target === 0) removePart(p, { quiet: true, noGuide: true }); }, i * gap));
@@ -1265,7 +1360,8 @@
       return;
     }
     const p = hit.part;
-    if (App.focus && p === App.focus) { Voice.say(`${p.say} Pull its pieces off with your finger!`, p.fact, false, [p.say, 'Pull its pieces off with your finger!']); return; }
+    if (App.focus && p === App.focus) { Voice.say(`${p.say} Pull its pieces off with your finger!`, learnFor(p), false, [p.say, 'Pull its pieces off with your finger!']); Caption.setPart(p); return; }
+    if (p.fixed) { explain(p); return; }
     if (p.target === 0) tryRemove(p);
     else if (p.kids.length && !App.focus) enterFocus(p);
     else putBack(p);
@@ -1308,11 +1404,11 @@
       if (pointers.size !== 1 || p.moved < 8 || !drag) return;
       if (!drag.mode) {
         let part = drag.part;
-        if (part && part.target === 0) {
+        if (part && part.target === 0 && !part.fixed) {
           let bl = blockersOf(part);
           // Little fingers grab whatever is under them: if that piece is stuck, pull the thing in its way instead.
           if (bl.length) {
-            const free = bl.filter((b) => !blockersOf(b).length);
+            const free = bl.filter((b) => !b.fixed && !blockersOf(b).length);
             const gp = Guide.on && Guide.target && Guide.target.part;
             const swap = free.find((b) => b === gp) || free[0];
             if (swap) { part = drag.part = swap; bl = []; }
@@ -1342,7 +1438,7 @@
         App.focus.spinPitch = clamp(App.focus.spinPitch + dy * 0.01, -1.4, 1.4);
       } else if (drag.mode === 'rotate') {
         App.yawT += dx * 0.009;
-        App.pitchT = clamp(App.pitchT + dy * 0.005, -0.1, 1.15);
+        App.pitchT = clamp(App.pitchT + dy * 0.006, -1.3, 1.4);
         setTip(null);
       }
     });
@@ -1394,7 +1490,7 @@
     const inst = App.inst;
     if (!inst) return;
     $('#btnPower').classList.toggle('on', App.on);
-    const anyIn = inst.parts.some((p) => p.target === 0);
+    const anyIn = inst.parts.some((p) => p.target === 0 && !p.fixed);
     $('#btnApart .lb').textContent = anyIn ? 'Take apart' : 'Put back';
     $('#btnApart').classList.toggle('active', !anyIn);
     $('#btnXray').classList.toggle('active', App.xray);
@@ -1403,9 +1499,10 @@
     $('#btnVoice').classList.toggle('off', !Voice.on);
     $('#btnGuide').classList.toggle('off', !Guide.on);
     $('#btnGuide').hidden = !inst.def.guide;
-    const out = inst.parts.filter(isOut).length;
-    $('#foundN').textContent = `${out} of ${inst.parts.length}`;
-    $('#foundBar').style.width = Math.round((out / inst.parts.length) * 100) + '%';
+    const movable = inst.parts.filter((p) => !p.fixed), out = movable.filter(isOut).length;
+    $('#foundN').textContent = `${out} of ${movable.length}`;
+    $('#foundBar').style.width = (movable.length ? Math.round((out / movable.length) * 100) : 0) + '%';
+    $('#found').hidden = !movable.length;
     const w = App.wins[inst.def.id] || 0;
     $('#fixes').hidden = !w;
     $('#fixesN').textContent = w;
@@ -1419,57 +1516,216 @@
       ? 'New part is in! Put everything back and turn it on.'
       : M.found ? 'You found it! Tap the burnt part to put in a new one.' : `${p.symptom} Find the broken part.`;
   }
+  // ---- devices, and the worlds inside their parts: a stack (device > LED > LED chip > atoms)
+  function disposeStack() { App.stack.forEach((st) => disposeTree(st.inst.root)); App.stack = []; }
+  function loadInst(def, level, world) {
+    const inst = instantiate(def, kit, level);
+    if (!world) {
+      const sh = def.view.shadow || [5, 4];
+      const blob = new THREE.Mesh(new THREE.PlaneGeometry(sh[0] * 1.6, sh[1] * 1.6), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, opacity: 0.4 }));
+      blob.rotation.x = -Math.PI / 2; blob.position.y = 0.01; blob.userData.noPick = true;
+      inst.root.add(blob);
+    }
+    prepShadows(inst.root);
+    turntable.add(inst.root);
+    Object.assign(App, { inst, on: !!world && def.startOn !== false, channel: 0, mission: null, lastAlive: false, hovered: null, xray: false, focus: null, lastAct: App.time });
+    $('#focusBar').hidden = true;
+    const v = def.view;
+    App.yaw = App.yawT = v.yaw || 0;
+    App.pitch = App.pitchT = v.pitch == null ? 0.2 : v.pitch;
+    App.zoom = App.zoomT = 1;
+    tgt.set(0, v.target[1], 0);
+    setWorldLook(world);
+    Guide.reset(inst);
+    refresh();
+    $('#home').hidden = true; $('#hud-top').hidden = false; $('#tools').hidden = false;
+    $('#btnChannel').hidden = !def.channels;
+    $('#btnMission').hidden = world || !inst.parts.some((p) => p.symptom);
+    updateMissionUI();
+    updateCrumbs();
+    return inst;
+  }
   function openDevice(def, level) {
     level = level || store.get('tal-level-' + def.id, 1);
     store.set('tal-level-' + def.id, level);
     App.seq++;
     Voice.stop();
     if (App.inst) { turntable.remove(App.inst.root); disposeTree(App.inst.root); }
-    App.focus = null; $('#focusBar').hidden = true;
-    const inst = instantiate(def, kit, level);
-    const sh = def.view.shadow || [5, 4];
-    const blob = new THREE.Mesh(new THREE.PlaneGeometry(sh[0] * 1.6, sh[1] * 1.6), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, opacity: 0.6 }));
-    blob.rotation.x = -Math.PI / 2; blob.position.y = 0.01; blob.userData.noPick = true;
-    inst.root.add(blob);
-    turntable.add(inst.root);
-    Object.assign(App, { inst, on: false, channel: 0, mission: null, lastAlive: false, hovered: null, xray: false, lastAct: App.time });
-    const v = def.view;
-    App.yaw = App.yawT = v.yaw || 0;
-    App.pitch = App.pitchT = v.pitch == null ? 0.2 : v.pitch;
-    App.zoom = App.zoomT = 1;
-    App.R = v.radius; tgt.set(0, v.target[1], 0);
-    Guide.reset(inst);
-    refresh();
-    $('#home').hidden = true; $('#hud-top').hidden = false; $('#tools').hidden = false;
-    $('#devName').textContent = def.name;
-    $('#devLevel').textContent = LEVELS[level - 1].name;
-    $('#devLevel').dataset.level = level;
-    $('#btnChannel').hidden = !def.channels;
-    $('#btnMission').hidden = !inst.parts.some((p) => p.symptom);
-    updateMissionUI();
+    disposeStack();
+    App.diving = null; $('#zoomFx').className = '';
+    App.level = level;
+    loadInst(def, level, false);
+    App.R = def.view.radius;
+    Caption.setPart(null);
     const first = !store.get('tal-safety', false);
     store.set('tal-safety', true);
     Voice.say(def.intro + (first ? ' ' + SAFETY : ''), null, false, first ? [def.intro, SAFETY] : def.intro);
     Guide.advance();
     try { history.replaceState(null, '', '#' + def.id); } catch (e) { /* ignore */ }
   }
+  function insideOf(p) {
+    const id = p && (p.inside || TAL.insideByName[p.name]);
+    return id && TAL.worlds[id] ? id : null;
+  }
+  // Fly into a part, then open the world inside it.
+  function diveInto(p) {
+    const id = insideOf(p);
+    if (!id || App.diving || !App.inst) return;
+    App.seq++;
+    Voice.stop();
+    setTip(null);
+    App.diving = { p, def: TAL.worlds[id] };
+    Sound.whoosh();
+    $('#zoomFx').className = 'in';
+    setTimeout(() => {
+      const d = App.diving;
+      if (!d || !App.inst) return;
+      App.stack.push({ inst: App.inst, on: App.on, channel: App.channel, yaw: App.yawT, pitch: App.pitchT, zoom: App.zoomT, xray: App.xray, mission: App.mission,
+        focus: App.focus, guide: { steps: Guide.steps, i: Guide.i, announced: Guide.announced }, crumb: d.p.name, R: App.R, part: d.p });
+      turntable.remove(App.inst.root);
+      App.diving = null;
+      loadInst(d.def, 3, true);
+      App.R = d.def.view.radius * 0.12; // start up close, then fly out
+      $('#zoomFx').className = 'out';
+      Caption.setPart(null);
+      Voice.say(d.def.intro, d.def.learn ? { levels: d.def.learn, i: 0 } : null);
+    }, 620);
+  }
+  function goBack() {
+    if (!App.stack.length) { goHome(); return; }
+    App.seq++;
+    Voice.stop();
+    setTip(null);
+    turntable.remove(App.inst.root);
+    disposeTree(App.inst.root);
+    const st = App.stack.pop();
+    turntable.add(st.inst.root);
+    Object.assign(App, { inst: st.inst, on: st.on, channel: st.channel, mission: st.mission, xray: st.xray, focus: null, hovered: null, lastAct: App.time });
+    App.yaw = App.yawT = st.yaw; App.pitch = App.pitchT = st.pitch; App.zoom = App.zoomT = st.zoom;
+    App.R = st.R * 0.3;
+    Guide.steps = st.guide.steps; Guide.i = st.guide.i; Guide.announced = st.guide.announced; Guide.target = null; Guide.pickTarget();
+    setWorldLook(App.stack.length > 0);
+    App.lastAlive = evaluate(App.inst, App.on).alive;
+    refresh();
+    if (st.focus && st.focus.target === 1) { App.focus = st.focus; $('#focusBar').hidden = false; $('#focusName').textContent = st.focus.name; }
+    else $('#focusBar').hidden = true;
+    $('#btnChannel').hidden = !App.inst.def.channels;
+    $('#btnMission').hidden = App.stack.length > 0 || !App.inst.parts.some((p) => p.symptom);
+    updateMissionUI();
+    updateCrumbs();
+    Caption.setPart(st.part);
+    $('#zoomFx').className = 'back';
+    setTimeout(() => { if ($('#zoomFx').className === 'back') $('#zoomFx').className = ''; }, 450);
+    Sound.whoosh();
+    Caption.show(`Back out to the ${lower(App.stack.length ? st.crumb : App.inst.def.name)}.`);
+  }
+  function updateCrumbs() {
+    if (!App.inst) return;
+    const rootDef = App.stack.length ? App.stack[0].inst.def : App.inst.def;
+    const trail = [rootDef.name].concat(App.stack.map((st) => st.crumb));
+    const el = $('#devName');
+    el.innerHTML = '';
+    trail.forEach((t, i) => {
+      if (i) { const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '\u203A'; el.append(sep); }
+      const sp = document.createElement('span'); sp.textContent = t;
+      if (i < trail.length - 1) sp.className = 'up';
+      el.append(sp);
+    });
+    const lv = $('#devLevel');
+    if (App.stack.length) { lv.textContent = App.inst.def.zoom + ' bigger'; lv.dataset.level = 'z'; }
+    else { lv.textContent = LEVELS[(App.level || 1) - 1].name; lv.dataset.level = App.level || 1; }
+    $('#btnHome .lbl').textContent = App.stack.length ? 'Back' : 'Devices';
+  }
   function goHome() {
     App.seq++;
     Voice.stop();
     Sound.setTV({});
     if (App.inst) { turntable.remove(App.inst.root); disposeTree(App.inst.root); }
-    App.inst = null; App.mission = null; App.focus = null;
+    disposeStack();
+    App.inst = null; App.mission = null; App.focus = null; App.diving = null;
     Guide.target = null;
-    $('#home').hidden = false; $('#hud-top').hidden = true; $('#tools').hidden = true; $('#mission').hidden = true; $('#focusBar').hidden = true; $('#hand').hidden = true;
+    Caption.setPart(null);
+    setWorldLook(false);
+    $('#zoomFx').className = '';
+    $('#home').hidden = false; $('#hud-top').hidden = true; $('#tools').hidden = true; $('#mission').hidden = true; $('#focusBar').hidden = true; $('#hand').hidden = true; $('#lookBadge').hidden = true;
     $('#caption').classList.remove('show');
     setTip(null);
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignore */ }
   }
-  function addLights(sc) {
-    sc.add(new THREE.HemisphereLight(0xe4ecff, 0x4a3524, 0.85));
-    const key = new THREE.DirectionalLight(0xfff4e6, 0.95); key.position.set(5, 9, 7); sc.add(key);
+  // Bigger pieces cast soft shadows; everything catches them.
+  function prepShadows(root) {
+    root.traverse((m) => {
+      if (!m.isMesh) return;
+      m.receiveShadow = true;
+      const g = m.geometry;
+      if (!g.boundingSphere) g.computeBoundingSphere();
+      const sc = Math.max(m.scale.x, m.scale.y, m.scale.z);
+      m.castShadow = !m.material.transparent && !m.userData.noPick && g.boundingSphere.radius * sc > 0.07;
+    });
+  }
+  function setWorldLook(world) {
+    if (!scene) return;
+    table.visible = !world;
+    stage.visible = !!world;
+    scene.background = world ? bgWorld : bgDevice;
+    scene.fog.color.set(world ? 0x050a14 : 0x141a27);
+  }
+  function addLights(sc, shadows) {
+    sc.add(new THREE.HemisphereLight(0xdfe8ff, 0x3a2a1f, 0.5));
+    const key = new THREE.DirectionalLight(0xfff1e0, 1.2);
+    key.position.set(5, 10, 7);
+    sc.add(key);
+    if (shadows) {
+      key.castShadow = true;
+      key.shadow.mapSize.set(2048, 2048);
+      const c = key.shadow.camera;
+      c.left = -11; c.right = 11; c.top = 11; c.bottom = -11; c.near = 1; c.far = 40;
+      key.shadow.bias = -0.0004; key.shadow.normalBias = 0.03; key.shadow.radius = 4;
+    }
     const back = new THREE.DirectionalLight(0xcfe0ff, 0.55); back.position.set(-6, 5, -7); sc.add(back);
-    const side = new THREE.DirectionalLight(0xffffff, 0.25); side.position.set(8, 2, -2); sc.add(side);
+    const side = new THREE.DirectionalLight(0xffffff, 0.22); side.position.set(8, 2, -2); sc.add(side);
+    const under = new THREE.DirectionalLight(0xffe2c4, 0.3); under.position.set(0, -6, 3); sc.add(under); // so the bottom isn't black when you look from below
+  }
+  // A soft "photo studio" for reflections on metal, glass and plastic.
+  function studioEnv(r) {
+    const pm = new THREE.PMREMGenerator(r);
+    const s2 = new THREE.Scene();
+    s2.add(new THREE.Mesh(new THREE.BoxGeometry(20, 12, 20), new THREE.MeshBasicMaterial({ color: 0x2c3344, side: THREE.BackSide })));
+    const panel = (w, h, x, y, z, rx, ry, c) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide }));
+      m.position.set(x, y, z); m.rotation.set(rx, ry, 0); s2.add(m);
+    };
+    panel(9, 4, 0, 5.9, 0, Math.PI / 2, 0, 0xffffff);
+    panel(5, 7, -9.9, 2, 1, 0, Math.PI / 2, 0xfff0dc);
+    panel(5, 7, 9.9, 2, -2, 0, -Math.PI / 2, 0xd6e4ff);
+    panel(12, 3, 0, -2, -9.9, 0, 0, 0x7a5a3c);
+    panel(6, 4, 0, 3, 9.9, 0, Math.PI, 0x9fb2d0);
+    const env = pm.fromScene(s2, 0.04).texture;
+    pm.dispose();
+    return env;
+  }
+  function gradientTex(top, bottom) {
+    const cv = document.createElement('canvas'); cv.width = 4; cv.height = 256;
+    const x = cv.getContext('2d'), g = x.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0, top); g.addColorStop(1, bottom);
+    x.fillStyle = g; x.fillRect(0, 0, 4, 256);
+    const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding;
+    return t;
+  }
+  function makeStage() {
+    const grid = kit.canvasTex(512, 512, (c, w) => {
+      c.fillStyle = '#0a1424'; c.fillRect(0, 0, w, w);
+      c.strokeStyle = 'rgba(88,184,255,0.28)'; c.lineWidth = 2;
+      for (let i = 0; i <= 16; i++) { const v = (i * w) / 16; c.beginPath(); c.moveTo(v, 0); c.lineTo(v, w); c.stroke(); c.beginPath(); c.moveTo(0, v); c.lineTo(w, v); c.stroke(); }
+    });
+    const g = new THREE.Group();
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.6, 0.16, 72), new THREE.MeshStandardMaterial({ map: grid, roughness: 0.45, metalness: 0.3 }));
+    disc.position.y = -0.08; disc.receiveShadow = true;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(4.45, 0.045, 10, 96), new THREE.MeshBasicMaterial({ color: 0x58b8ff, toneMapped: false }));
+    ring.rotation.x = Math.PI / 2; ring.position.y = 0.01;
+    g.add(disc, ring);
+    g.visible = false;
+    return g;
   }
   function frameDistance(R, cam) {
     const vf = THREE.MathUtils.degToRad(cam.fov), hf = 2 * Math.atan(Math.tan(vf / 2) * cam.aspect);
@@ -1478,6 +1734,7 @@
   function makeThumb(def, r) {
     const sc = new THREE.Scene();
     addLights(sc);
+    if (thumbEnv) sc.environment = thumbEnv;
     const inst = instantiate(def, kit, 1);
     sc.add(inst.root);
     inst.root.rotation.y = def.view.yaw || 0;
@@ -1500,6 +1757,8 @@
     try {
       tr = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
       tr.setPixelRatio(1); tr.setSize(480, 360, false); tr.outputEncoding = THREE.sRGBEncoding;
+      tr.toneMapping = THREE.ACESFilmicToneMapping; tr.toneMappingExposure = 1.1;
+      thumbEnv = studioEnv(tr);
     } catch (e) { tr = null; }
     TAL.devices.forEach((def) => {
       const card = document.createElement('div');
@@ -1529,7 +1788,7 @@
       grid.appendChild(card);
       if (tr) { try { img.src = makeThumb(def, tr); } catch (e) { /* thumbnail optional */ } }
     });
-    if (tr) { tr.dispose(); if (tr.forceContextLoss) tr.forceContextLoss(); }
+    if (tr) { if (thumbEnv) thumbEnv.dispose(); thumbEnv = null; tr.dispose(); if (tr.forceContextLoss) tr.forceContextLoss(); }
   }
   function woodTexture() {
     const cv = document.createElement('canvas'); cv.width = cv.height = 512;
@@ -1565,7 +1824,8 @@
       Voice.say("Hi! I'm Sparky. If you can hear me, we're ready to take things apart!");
       $('#soundHelp').hidden = false;
     });
-    on('#btnHome', goHome);
+    on('#btnHome', goBack);
+    on('#lookBadge', () => { if (Caption.part) diveInto(Caption.part); });
     on('#btnPower', togglePower);
     on('#btnChannel', nextChannel);
     on('#btnTurn', () => { App.yawT += Math.PI; Sound.whoosh(); });
@@ -1588,7 +1848,7 @@
       if (e.key === 'p') togglePower();
       else if (e.key === 'c') nextChannel();
       else if (e.key === 'x') setXray(!App.xray);
-      else if (e.key === 'Escape') { if (App.focus) exitFocus(); else goHome(); }
+      else if (e.key === 'Escape') { if (App.focus) exitFocus(); else goBack(); }
     });
     // iOS only allows sound after a touch; unlock on the very first one anywhere.
     const firstTouch = () => { Sound.unlock(); document.removeEventListener('touchend', firstTouch); document.removeEventListener('click', firstTouch); };
@@ -1603,7 +1863,7 @@
     const t = now / 1000, dt = Math.min(0.05, App.time ? t - App.time : 0.016);
     App.time = t;
     const inst = App.inst;
-    if (!inst) { renderer.render(scene, camera); return; }
+    if (!inst) { renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); return; }
     const v = inst.def.view;
     const k6 = Math.min(1, dt * 6), k3 = Math.min(1, dt * 3);
     App.yaw += (App.yawT - App.yaw) * k6;
@@ -1612,7 +1872,12 @@
     turntable.rotation.y = App.yaw;
     turntable.updateMatrixWorld(true);
     let wantR, wantLift;
-    if (App.focus) {
+    if (App.diving) {
+      // flying into a part: aim at it and rush in
+      tgt.lerp(worldPos(App.diving.p), Math.min(1, dt * 8));
+      wantR = 0.05;
+      wantLift = 0;
+    } else if (App.focus) {
       const w = worldPos(App.focus);
       tgt.lerp(w, k3);
       wantR = (App.focus.focusRadius || 1.4) * App.zoom;
@@ -1624,15 +1889,27 @@
       wantR = lerp(v.radius, v.explodedRadius || v.radius * 1.5, f) * App.zoom;
       wantLift = wantR * 0.22;
     }
-    App.R += (wantR - App.R) * k3;
-    App.lift += (wantLift - App.lift) * k3;
+    const kR = App.diving ? Math.min(1, dt * 5) : k3;
+    App.R += (wantR - App.R) * kR;
+    App.lift += (wantLift - App.lift) * kR;
     const dist = frameDistance(App.R, camera);
     camera.position.set(tgt.x, tgt.y + App.lift + dist * Math.sin(App.pitch), tgt.z + dist * Math.cos(App.pitch));
     camera.lookAt(tgt.x, tgt.y + App.lift, tgt.z);
     camLocal.set(0, Math.sin(App.pitch), Math.cos(App.pitch)).applyAxisAngle(Y_AXIS, -App.yaw).normalize();
+    // the table (or the stage) fades away when you look from underneath
+    const under = camera.position.y < 0.4;
+    [table, stage].forEach((o) => o.traverse((m) => {
+      if (!m.material) return;
+      const want = under ? 0.1 : 1;
+      m.material.transparent = true;
+      m.material.opacity += (want - m.material.opacity) * k6;
+      m.material.depthWrite = m.material.opacity > 0.6;
+    }));
+    let moving = App.diving || App.focus || Math.abs(App.yawT - App.yaw) > 0.002 || Math.abs(App.pitchT - App.pitch) > 0.002 || !!inst.def.tick;
 
     const guidePart = Guide.on && Guide.target && Guide.target.part;
     for (const p of inst.parts) {
+      if (p.manual || p.t !== p.target || p.shake > 0) moving = true;
       if (!p.manual && p.t !== p.target) {
         const dur = p.kind === 'screw' ? 0.95 : 0.65;
         p.t = clamp(p.t + (p.target > p.t ? 1 : -1) * (dt / dur), 0, 1);
@@ -1676,10 +1953,23 @@
     }
     sparks.update(dt); smoke.update(dt); confetti.update(dt);
     if (inst.screen && t - App.lastScreen > 1 / 30) { renderScreen(inst, App.out, t); App.lastScreen = t; }
-    if (inst.def.tick) inst.def.tick(dt, t, inst, App.out);
+    if (inst.def.tick) inst.def.tick(dt, t, inst, App.out, App.on);
+    // shadows: redraw every frame while things move, otherwise a few times a second
+    App.shadowT -= dt;
+    if (moving || App.shadowT <= 0) { renderer.shadowMap.needsUpdate = true; App.shadowT = 0.15; }
     renderer.render(scene, camera);
     Guide.tick();
     placeHand();
+    placeLook();
+  }
+  // The magnifying glass floats over the last part you touched, if there's a world inside it.
+  function placeLook() {
+    const b = $('#lookBadge'), p = Caption.part;
+    if (!p || App.diving || !App.inst || App.inst.parts.indexOf(p) < 0 || !insideOf(p)) { b.hidden = true; return; }
+    const sc = toScreen(worldPos(p));
+    if (sc.x < 0 || sc.y < 0 || sc.x > innerWidth || sc.y > innerHeight) { b.hidden = true; return; }
+    b.hidden = false;
+    b.style.transform = `translate(${Math.min(innerWidth - 150, sc.x + 18)}px, ${Math.max(70, sc.y - 64)}px)`;
   }
   function resize() {
     renderer.setSize(innerWidth, innerHeight, false);
@@ -1697,16 +1987,29 @@
     }
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.autoUpdate = false;
     kit = makeKit();
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x161c2a);
     scene.fog = new THREE.Fog(0x161c2a, 26, 60);
     camera = new THREE.PerspectiveCamera(36, 1, 0.05, 200);
     raycaster = new THREE.Raycaster();
-    addLights(scene);
-    const table = new THREE.Mesh(new THREE.CylinderGeometry(13, 13, 0.4, 72), new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: 0.75 }));
+    raycaster.camera = camera;
+    addLights(scene, true);
+    scene.environment = studioEnv(renderer);
+    bgDevice = gradientTex('#222c40', '#0e121b');
+    bgWorld = gradientTex('#0d2340', '#020509');
+    scene.background = bgDevice;
+    table = new THREE.Mesh(new THREE.CylinderGeometry(13, 13, 0.4, 72), new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: 0.62, transparent: true }));
     table.position.y = -0.2;
+    table.receiveShadow = true;
     scene.add(table);
+    stage = makeStage();
+    scene.add(stage);
     turntable = new THREE.Group();
     scene.add(turntable);
     dotTex = softDot(); shadowTex = shadowTexture();
@@ -1753,6 +2056,9 @@
     voice: () => ({ clips: window.TAL_VOICE ? Object.keys(window.TAL_VOICE.clips).length : 0, talking: Voice.talking, src: Voice.el && Voice.el.src.slice(-20), unlocked: Voice.unlocked, ctx: Sound.ctx && Sound.ctx.state }), explodeAll, fixAll, startMission, nextChannel, setXray, hint,
     enterFocus: (id) => enterFocus(byId(id)), exitFocus,
     pull: (id) => tryRemove(byId(id)),
+    dive: (id) => diveInto(byId(id)), back: () => goBack(), touch: (id) => { const p = byId(id); Voice.say(p.say, learnFor(p)); Caption.setPart(p); },
+    deeper: () => { Caption.deeper(); return $('#capText').textContent; },
+    crumbs: () => $('#devName').textContent + ' [' + $('#devLevel').textContent + ']',
     tapPart(id) {
       const s = toScreen(worldPos(byId(id)));
       const hit = pick(s.x, s.y);

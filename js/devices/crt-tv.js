@@ -164,6 +164,10 @@ TAL.registerDevice({
     funnel.userData.pickThrough = neck.userData.pickThrough = true;
     tube.add(k.at(k.box(ow + 0.34, oh + 0.34, 0.08, k.metal(0x7d8186)), 0, 0, 1.2));
     body.add(tube);
+    add({ id: 'tube', name: 'Picture tube', obj: tube, pull: [-5.8, 0.1, -0.4], blockedBy: ['cover', 'yoke', 'gun', 'flyback', 'degauss'], face: [0, 0, 1],
+      say: 'The big glass picture tube! The front of it is the screen.',
+      breaks: "The screen is gone! There's nothing to make a picture on.",
+      fact: 'There is no air inside the tube at all. The back of the screen is painted with tiny dots that glow when the electrons hit them.' });
 
     // ---- degaussing coil (a loop of taped wire around the front of the tube)
     const loop = [];
