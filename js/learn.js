@@ -30,7 +30,7 @@ TAL.learn = {
   'Bridge rectifier': [
     'Wall electricity keeps changing direction, but the parts inside a TV want it to flow one way. This part turns it around so it only goes forward.',
     'It is four one-way gates called diodes, wired in a diamond. Whichever way the wall power is pushing, two of the gates open and send the current down the same path.',
-    'Wall power is alternating current, and in North America it reverses direction 60 times a second. A bridge rectifier flips the negative halves upward, giving pulsing direct current that a capacitor can then smooth.',
+    'Wall power is alternating current, and in North America it goes back and forth 60 times a second, which means it reverses direction 120 times a second. A bridge rectifier flips the negative halves upward, giving pulsing direct current that a capacitor can then smooth.',
     'Each diode drops about 0.7 volts when conducting, so a bridge loses roughly 1.4 volts and a little heat. A 120 volt outlet peaks near 170 volts, so the rectifier must be rated well above that.',
   ],
   'Button cap': [
@@ -75,7 +75,7 @@ TAL.learn = {
     'The diffuser spreads out the light so the screen glows evenly, instead of showing bright spots where the lights are.',
     'It is a thick sheet of clear plastic with tiny bumps or particles inside. They scatter the light in all directions, so a row of small lights looks like one smooth glow.',
     'Scattering happens when light hits tiny particles or rough surfaces and bounces in many directions. The diffuser uses this to turn many point sources into one even sheet of light behind the panel.',
-    'Diffusers are often polystyrene or acrylic with embedded scattering particles, commonly about 1 to 2 millimeters thick. A stack of thin films above it, such as prism sheets, then steers the light toward the viewer. Spacing from the LEDs trades evenness against thinness.',
+    'Diffusers are often polystyrene or acrylic with embedded scattering particles, often one to a few millimeters thick. A stack of thin films above it, such as prism sheets, then steers the light toward the viewer. Spacing from the LEDs trades evenness against thinness.',
   ],
   'Diode': [
     'A diode is a one-way street for electricity. It lets current go forward but not backward.',
@@ -93,14 +93,14 @@ TAL.learn = {
     'The electron gun shoots a thin beam of tiny particles at the screen. Where they hit, the screen glows.',
     'At the back of the tube, a small heated piece of metal boils off electrons. Metal plates then speed them up and squeeze them into a thin beam aimed at the front glass.',
     'A heater warms a cathode until electrons escape from its surface, a process called thermionic emission. High voltage on nearby electrodes pulls the electrons forward and a focusing lens made of electric fields narrows the beam.',
-    'A color tube has three guns for red, green and blue, in a single neck. The final anode voltage is about 25 thousand volts, and beam currents are only a few milliamps in total. The cathodes run at a few hundred volts and the heater uses about 6 volts.',
+    'A color tube has three guns for red, green and blue, in a single neck. The final anode voltage is about 25 thousand volts, and beam currents are tiny, only milliamps in total. The cathodes run at a few hundred volts and the heater uses about 6 volts.',
   ],
   'End cap': [
     'The end cap is the lid at the bottom. You twist it off to get to the batteries.',
     'It screws onto the tube with threads, like a jar lid. A metal spring inside it presses the batteries forward so the electricity can always connect.',
   ],
   'Flyback transformer': [
-    'This part makes the very strong electricity that the picture tube needs. It is the reason an old TV can give you a shock even when it is off.',
+    'This part makes the very strong electricity that the picture tube needs. That strong electricity can stay inside an old TV even after it is turned off.',
     'A transformer is two coils of wire wound near each other. The flyback has a small coil in and a huge coil out, so it can turn a small push of electricity into a giant one, thousands of volts.',
     'Changing current in one coil makes a changing magnetic field, which makes a voltage in the other coil. More turns in the second coil means a higher voltage. The flyback also uses the sudden collapse of the field to make a big voltage spike.',
     'It runs at the line frequency of about 15,734 hertz, and a stack of diodes inside rectifies the pulse to make roughly 25 thousand volts for the tube anode. The tube itself acts as a capacitor that can hold charge for a long time.',
@@ -109,7 +109,7 @@ TAL.learn = {
     'This knob makes the picture sharp. Turning it makes the glowing dots smaller and crisper.',
     'It changes the electricity going to a part of the electron gun, which squeezes the beam to a thinner point. A thinner beam makes a sharper picture.',
     'The focus electrode in the gun forms an electric lens. Changing its voltage changes how strongly the beam is squeezed, so the beam comes to a tight spot right on the screen instead of spreading out blurry.',
-    'The focus voltage is a fraction of the final anode voltage, typically around 20 to 30 percent, so it is several thousand volts and comes from a divider near the flyback transformer. A knob or variable resistor adjusts it.',
+    'The focus voltage is a fraction of the final anode voltage, so it is several thousand volts and comes from a divider near the flyback transformer. A knob or variable resistor adjusts it.',
   ],
   'Front frame': [
     'The front frame is the border around the screen. It holds everything in place and makes the TV look neat.',
@@ -146,7 +146,7 @@ TAL.learn = {
     'Designers think in thermal resistance, in degrees per watt. A part that wastes 10 watts on a heat sink with 5 degrees per watt rises about 50 degrees above the air around it. Thermal paste or pads fill tiny air gaps between the part and the metal.',
   ],
   'High-voltage wire': [
-    'This thick wire carries the strongest electricity in the TV, up to the front of the picture tube. Its heavy rubber coat keeps it safe.',
+    'This thick wire carries the strongest electricity in the TV, to the picture tube. Its heavy rubber coat keeps it safe.',
     'It has a thick insulating coat, much thicker than normal wires, because electricity at such a high voltage tries hard to jump out. The wire ends at a rubber cup stuck onto the tube.',
     'Voltage is the push on electricity, and a very high push can jump through air or thin insulation as a spark. Thick insulation and a rounded cup keep the field from concentrating and leaking away as a corona or arc.',
     'It carries roughly 25 thousand volts to the anode button on the side of the tube, but only a tiny current. Insulation is silicone or similar rubber, rated for well above the working voltage. The glass funnel is coated inside and out to act as a capacitor.',
@@ -158,7 +158,7 @@ TAL.learn = {
     'A thin film transistor at every subpixel sets an electric field across the liquid crystal, so there are about 25 million of them in a 4K panel. A color filter gives each subpixel its red, green or blue, and only a small fraction of the backlight finally exits the front.',
   ],
   'LED bulb': [
-    'This is the part that makes the light. It uses a tiny chip instead of a hot, glowing wire, so it stays cool and lasts a long time.',
+    'This is the part that makes the light. It uses a tiny chip instead of a hot, glowing wire, so it wastes less heat and lasts a long time.',
     'A small chip sits inside a clear dome with two metal legs. When electricity goes through, the chip glows. The dome helps the light spread out in front instead of every direction.',
     'LED means light emitting diode. Electrons crossing the diode junction fall into lower energy states and release the extra energy as photons, which are tiny packets of light.',
     'A white LED is usually a blue chip with a yellow phosphor coating, and the mix looks white. Efficiency is far higher than an old filament bulb, which turns most of its power into heat, and a good LED can last tens of thousands of hours.',
@@ -184,7 +184,7 @@ TAL.learn = {
   'LED light': [
     'Each little light here helps light up the screen from behind. Together they make the glow you see.',
     'The TV has many small LEDs lined up in rows. Each one is bright and uses very little power, and together they light the whole screen evenly.',
-    'LEDs are semiconductors that turn current directly into light. Because each one is tiny and efficient, a TV can use dozens or hundreds of them without making much heat. Many TVs wire them in strings so they share the same current.',
+    'LEDs are semiconductors that turn current directly into light. Because each one is tiny and efficient, a TV can use dozens or hundreds of them without making as much heat. Many TVs wire them in strings so they share the same current.',
     'In a direct lit design, LEDs sit behind the panel in rows and dim in zones, while in an edge lit design they sit along the sides. Strings are driven at a constant current, because the voltage across an LED varies with temperature.',
   ],
   'LED strip': [
@@ -213,7 +213,7 @@ TAL.learn = {
     'A magnet pulls on some metals and can push or pull on other magnets. Here, the magnet helps make sound.',
     'The speaker has a strong magnet sitting behind a coil of wire. When electricity flows in the coil, it becomes a magnet too, and the two push and pull on each other, making the cone move.',
     'A magnet has a magnetic field around it. A wire carrying current in that field feels a force, called the Lorentz force. This is the effect that makes speakers and electric motors work.',
-    'Speaker magnets are usually ferrite, a ceramic, or neodymium in small, slim designs. The field in the gap is typically around 1 tesla at the magnet and less in the air gap. A stronger gap field means more force for the same current.',
+    'Speaker magnets are usually ferrite, a ceramic, or neodymium in small, slim designs. The field is strongest in the narrow air gap where the coil sits. A stronger gap field means more force for the same current.',
   ],
   'Main board': [
     'This is the TV brain. It takes in the picture and sound and decides what the screen and speakers should do.',
@@ -360,7 +360,7 @@ TAL.learn = {
     'Rubber is squishy but springs back. The ring is pressed between two parts, filling tiny gaps, so water and dust cannot sneak through.',
   ],
   'Safety capacitor': [
-    'This is a special capacitor that helps keep you safe. It keeps stray electricity from leaking into the case.',
+    'This is a special capacitor that helps keep you safe. It helps keep electrical noise from leaking out of the TV.',
     'It sits between the dangerous wall side and the safe low voltage side. It is built extra strong, so even if it wears out, it fails in a safe way and does not cause a shock.',
     'Electronics make high frequency noise. This capacitor gives noise a path to go away through, but it is made so that only a very tiny, safe current can pass at wall frequency. Safety rules require special construction and testing.',
     'These are often called Y capacitors, with values of just a few nanofarads, typically 1 to 4.7. A Y class part is rated to withstand a voltage of thousands of volts, and must fail open rather than short. It is the reason some TV frames tingle faintly.',
@@ -435,7 +435,7 @@ TAL.learn = {
     'This part protects the TV from sudden big jolts of electricity, like those that can come in during a storm.',
     'It is a small disc that usually acts like an open door. When a big jolt comes, the disc suddenly lets electricity pass through to the side, and the jolt goes away from the TV.',
     'This is a varistor, which stands for variable resistor. Its resistance is very high at normal voltage and drops sharply above a threshold, so a voltage spike is shorted out and absorbed rather than reaching the delicate parts.',
-    'It is usually a metal oxide varistor, made of zinc oxide grains. A 120 volt line would use a part rated near 150 to 175 volts. Each absorbed surge slowly wears it out, and it is often paired with a fuse in case it fails.',
+    'It is usually a metal oxide varistor, made of zinc oxide grains. A 120 volt line would use a part rated a bit above the normal line voltage. Each absorbed surge slowly wears it out, and it is often paired with a fuse in case it fails.',
   ],
   'Switch contact': [
     'This little piece of metal touches another piece of metal and lets the electricity pass. When you press the switch, they connect.',

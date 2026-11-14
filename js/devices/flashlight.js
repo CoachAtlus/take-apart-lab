@@ -7,7 +7,7 @@ TAL.registerDevice({
   subtitle: 'A little circuit you can hold',
   powerSound: 'click',
   channels: false,
-  view: { target: [0, 1.3, 0], radius: 4.6, explodedRadius: 5.8, explodedY: 1.5, yaw: -0.3, pitch: 0.38, shadow: [9, 3] },
+  view: { target: [0, 1.3, 0], radius: 4.6, explodedRadius: 7.4, explodedY: 1.7, yaw: -0.3, pitch: 0.38, shadow: [9, 3] },
   intro: 'This is a flashlight. It is a great way to see how electricity travels in a loop.',
   shellSay: "That's the flashlight's tube. The batteries hide inside it. Try the X-ray button to see them!",
   guide: [
@@ -25,7 +25,21 @@ TAL.registerDevice({
     const Y = 1.0, X = 2.2; // flashlight center; it points left, toward the wall
     const body = k.at(k.group(), X, 0, 0);
     root.add(body);
-    const red = k.metal(0xd8342c, { roughness: 0.35, metalness: 0.55 });
+    // anodized, brushed red aluminum: fine streaks along the length of the tube
+    const rn = k.rng(9);
+    const brushed = k.canvasTex(256, 256, (c, w, h) => {
+      const g = c.createLinearGradient(0, 0, w, 0);
+      g.addColorStop(0, '#c42d27'); g.addColorStop(0.5, '#dc3b33'); g.addColorStop(1, '#c42d27');
+      c.fillStyle = g; c.fillRect(0, 0, w, h);
+      for (let i = 0; i < 420; i++) {
+        const x = rn() * w;
+        c.fillStyle = rn() < 0.5 ? `rgba(255,210,200,${0.04 + rn() * 0.09})` : `rgba(70,8,6,${0.05 + rn() * 0.1})`;
+        c.fillRect(x, 0, 0.6 + rn() * 1.4, h);
+      }
+    });
+    brushed.wrapS = brushed.wrapT = T.RepeatWrapping;
+    brushed.repeat.set(2, 1);
+    const red = k.metal(0xffffff, { map: brushed, roughness: 0.42, metalness: 0.6 });
     const rubber = k.mat(0x151515, { roughness: 0.8 });
     const along = (m) => k.rot(m, 0, 0, Math.PI / 2); // turn a cylinder to lie along x
     const ringX = (r, t, m) => k.rot(k.torus(r, t, m), 0, Math.PI / 2, 0); // a ring around the x axis
@@ -36,7 +50,7 @@ TAL.registerDevice({
     // ---- shell: tube, head, cradles
     const shell = k.group(
       k.at(along(k.cyl(0.42, 0.42, 3.2, red, 32, true)), 0, Y, 0),
-      k.at(along(k.cyl(0.62, 0.45, 0.8, k.metal(0xd8342c, { roughness: 0.35, metalness: 0.55, side: T.DoubleSide }), 32, true)), -2.0, Y, 0)
+      k.at(along(k.cyl(0.62, 0.45, 0.8, k.metal(0xffffff, { map: brushed, roughness: 0.42, metalness: 0.6, side: T.DoubleSide }), 32, true)), -2.0, Y, 0)
     );
     for (let i = 0; i < 6; i++) shell.add(k.at(ringX(0.43, 0.025, k.metal(0x9e231d)), 0.4 + i * 0.18, Y, 0));
     shell.add(k.at(k.box(0.35, 0.6, 1.0, k.mat(0x5a3b22)), -1.0, 0.3, 0));
@@ -70,7 +84,8 @@ TAL.registerDevice({
     const lens = k.group(k.at(along(k.cyl(0.6, 0.6, 0.05, k.glass(0xdff3ff, 0.35), 32)), -2.42, Y, 0), k.at(ringX(0.6, 0.04, k.metal(0xcfd5dc)), -2.42, Y, 0));
     body.add(lens);
     add({ id: 'lens', name: 'Lens', obj: lens, pull: [-0.8, 0, 2.4], face: [-1, 0, 0],
-      say: 'The clear lens lets the light out and keeps the dust out.' });
+      say: 'The clear lens lets the light out and keeps the dust out.',
+      breaks: 'The light still shines, but the beam is wider and a little dimmer. And dust can get in!' });
     sub(lens, 'lens', { id: 'oringL', name: 'Rubber ring', obj: k.at(k.group(ringX(0.57, 0.022, rubber)), -2.39, Y, 0), pull: [0.0, -0.5, 0.5], level: 3,
       say: 'A rubber ring seals the lens so water cannot sneak in.', breaks: 'The light still works, but now rain could get inside!', breaksAlways: true });
 
@@ -91,10 +106,11 @@ TAL.registerDevice({
     add({ id: 'bulb', name: 'LED bulb', obj: bulb, pull: [0.3, 1.8, 1.7], blockedBy: ['reflector'], face: [-1, 0, 0], focusRadius: 0.6,
       say: 'This little bulb makes the light!', breaks: 'No bulb, no light!',
       fact: 'This bulb is an LED. When electricity flows through it, it glows.',
-      symptom: 'It will not light up, even with the switch on.' });
+      symptom: 'The switch clicks, but the bulb stays dark.' });
     const ledChip = k.at(k.group(k.box(0.05, 0.05, 0.05, k.glow(0xffe9a8, 0xfff2c0))), -1.95, Y, 0);
     sub(bulb, 'bulb', { id: 'ledChip', name: 'LED chip', obj: ledChip, pull: [-0.3, 0.4, 0.4], level: 3,
-      say: 'This tiny chip is the part that really glows. The glass around it just protects it.', breaks: 'No chip, no light!' });
+      say: 'This tiny chip is the part that really glows. The glass around it just protects it.', breaks: 'No chip, no light!',
+      symptom: 'The glass looks fine, but no light comes out.' });
 
     // ---- switch (+ button cap and metal contact)
     const sw = k.group(k.at(k.box(0.5, 0.06, 0.32, k.metal(0x2a2a2a)), -1.0, Y + 0.42, 0));
@@ -102,11 +118,12 @@ TAL.registerDevice({
     add({ id: 'switch', name: 'Switch', obj: sw, pull: [0, 1.3, 0.9], face: [0, 1, 0], focusRadius: 0.7,
       say: 'The switch opens and closes the path for the electricity.', breaks: 'The path is broken, so the light goes out.',
       fact: 'When you click it on, a little piece of metal touches and closes the loop. Click it off and the loop opens.',
-      symptom: 'It will not light up, even with the switch on.' });
+      symptom: 'The switch does not click right. It feels broken.' });
     sub(sw, 'switch', { id: 'button', name: 'Button cap', obj: k.at(k.group(k.cyl(0.13, 0.15, 0.14, k.mat(0x3a3a3a, { roughness: 0.8 }), 20)), -1.0, Y + 0.5, 0), pull: [0, 0.5, 0.3], level: 3,
       say: 'The rubber button cap is the part your thumb pushes.', breaks: 'The switch still works, you just push the metal part now.', breaksAlways: true });
     sub(sw, 'switch', { id: 'contact', name: 'Switch contact', obj: k.at(k.group(k.box(0.3, 0.03, 0.12, k.metal(0xd8c48a))), -1.0, Y + 0.36, 0), pull: [0.4, 0.6, 0.4], level: 3,
-      say: 'This little metal strip is what really touches to close the loop.', breaks: 'No contact, so the loop is open. No light!' });
+      say: 'This little metal strip is what really touches to close the loop.', breaks: 'No contact, so the loop is open. No light!',
+      symptom: 'The switch feels mushy, and the light never comes on.' });
 
     // ---- batteries (+ their labels)
     const battery = (cx) => {
@@ -123,9 +140,10 @@ TAL.registerDevice({
     const b1 = battery(0.85), b2 = battery(-0.5);
     add({ id: 'bat1', name: 'Battery', obj: b1.g, pull: [2.4, -0.62, 2.4], blockedBy: ['tailcap', 'spring'], face: [0, 0, 1], focusRadius: 1,
       say: 'Batteries store electricity, like a lunchbox stores food.', breaks: 'With a battery gone, the loop is broken. No light!',
-      fact: loop, symptom: 'It will not light up, even with the switch on.' });
+      fact: loop, symptom: 'It is dead. The batteries feel empty.' });
     add({ id: 'bat2', name: 'Battery', obj: b2.g, pull: [3.7, -0.62, 3.3], blockedBy: ['bat1'], face: [0, 0, 1], focusRadius: 1,
-      say: 'Another battery! Two batteries push the electricity twice as hard.', breaks: 'With a battery gone, the loop is broken. No light!', fact: loop });
+      say: 'Another battery! Two batteries push the electricity twice as hard.', breaks: 'With a battery gone, the loop is broken. No light!', fact: loop,
+      symptom: 'It is dead. One of the batteries feels empty.' });
     [b1, b2].forEach((b, i) => sub(b.g, 'bat' + (i + 1), { id: 'wrap' + (i + 1), name: 'Battery label', obj: b.wrap, pull: [0, 0.7, 0.3], level: 3, face: [0, 0, 1],
       say: 'The label is just a wrapper. Underneath is a metal can full of special paste that makes electricity.',
       breaks: 'The battery still works without its label!', breaksAlways: true,
@@ -138,7 +156,7 @@ TAL.registerDevice({
     body.add(spring);
     add({ id: 'spring', name: 'Spring', obj: spring, pull: [1.0, 0.9, 1.9], blockedBy: ['tailcap'], level: 2, fuse: 'tailcap', face: [1, 0, 0],
       say: 'The spring pushes the batteries together so they touch.', breaks: "The batteries aren't pushed together anymore. No light!",
-      fact: loop, symptom: 'It will not light up, even with the switch on.' });
+      fact: loop, symptom: 'The batteries rattle around loose inside, and the light will not come on.' });
 
     // ---- end cap (+ rubber ring, lanyard loop)
     const tailcap = k.group(k.at(along(k.cyl(0.45, 0.45, 0.45, k.metal(0x2d2d30, { roughness: 0.5 }), 32)), 1.83, Y, 0));
@@ -146,7 +164,8 @@ TAL.registerDevice({
     body.add(tailcap);
     add({ id: 'tailcap', name: 'End cap', obj: tailcap, pull: [1.6, 0, 1.5], face: [1, 0, 0], focusRadius: 0.9,
       say: 'The end cap screws on and holds the batteries in.',
-      breaks: 'The end is open, so the electricity cannot get all the way around. The light goes out.', fact: loop });
+      breaks: 'The end is open, so the electricity cannot get all the way around. The light goes out.', fact: loop,
+      symptom: 'The back end feels loose, and the light will not come on.' });
     sub(tailcap, 'tailcap', { id: 'oringT', name: 'Rubber ring', obj: k.at(k.group(ringX(0.43, 0.025, rubber)), 1.62, Y, 0), pull: [-0.3, -0.5, 0.4], level: 3,
       say: 'A rubber ring seals the end cap so water cannot sneak in.', breaks: 'The light still works, but now rain could get inside!', breaksAlways: true });
     sub(tailcap, 'tailcap', { id: 'lanyard', name: 'Lanyard loop', obj: k.at(k.group(ringX(0.16, 0.035, k.metal(0xb9bec6))), 2.12, Y, 0), pull: [0.5, 0.4, 0.3], level: 3,
@@ -171,15 +190,18 @@ TAL.registerDevice({
         : !has('switch') || !has('contact') ? 'The switch is missing, so the path is broken.'
         : "The end is open, so the electricity can't get all the way around.";
     }
-    return { alive, reason, light: alive ? (has('reflector') ? 'beam' : 'wide') : 'none' };
+    return { alive, reason, light: alive ? (has('reflector') ? 'beam' : 'wide') : 'none', lens: has('lens') };
   },
 
   apply(out, inst) {
     const r = inst.refs, L = out.light;
     r.beam.visible = L === 'beam';
     r.wide.visible = L === 'wide';
-    r.spot.intensity = L === 'beam' ? 2.8 : L === 'wide' ? 0.9 : 0;
-    r.spot.angle = L === 'wide' ? 0.75 : 0.3;
+    const open = !out.lens; // no lens: a wider, dimmer spot
+    r.spot.intensity = (L === 'beam' ? 2.8 : L === 'wide' ? 0.9 : 0) * (open ? 0.7 : 1);
+    r.spot.angle = (L === 'wide' ? 0.75 : 0.3) + (open ? 0.18 : 0);
+    r.beam.scale.set(open ? 1.25 : 1, 1, open ? 1.25 : 1);
+    r.beam.material.opacity = open ? 0.11 : 0.16;
     r.bulbGlass.material.emissiveIntensity = L !== 'none' ? 2.2 : 0;
     r.ledChip.material.emissiveIntensity = L !== 'none' ? 4 : 0;
   },

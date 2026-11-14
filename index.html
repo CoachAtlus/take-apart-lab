@@ -213,6 +213,9 @@ button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
 #lookTags { position: fixed; left: 0; top: 0; z-index: 4; pointer-events: none; }
 .lookTag { position: absolute; left: 0; top: 0; pointer-events: auto; border: 2px solid #fff; border-radius: 999px; background: #2f7de0; color: #fff;
   font: 800 14px var(--display); padding: 5px 12px; white-space: nowrap; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
+.lookTag.crit2 { background: #e0352a; }
+.lookTag.crit1 { background: #f08a10; }
+.lookTag.crit0 { background: #1fa85e; }
 .lookTag::before { content: ""; display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px; border: 2.5px solid #fff; border-radius: 50%; box-sizing: border-box; }
 #zoomCtl { position: fixed; right: max(12px, env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 10px; z-index: 3; }
 #zoomCtl button { width: 52px; height: 52px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.14); background: var(--panel); color: var(--ink); display: grid; place-items: center; cursor: pointer; box-shadow: 0 4px 0 rgba(0,0,0,0.35); }
@@ -226,6 +229,28 @@ button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
 .helpInner li { margin-bottom: 6px; }
 #btnHelpClose { border: 0; border-radius: 999px; background: var(--yellow); color: var(--yellow-ink); font: 800 18px var(--display); padding: 10px 26px; cursor: pointer; }
 @media (max-width: 560px) { #zoomCtl button { width: 44px; height: 44px; } #btnHelp { display: none; } }
+.tool[hidden] { display: none !important; }
+.sheet { position: fixed; inset: 0; z-index: 12; background: rgba(5,8,14,0.6); display: grid; place-items: center; padding: 16px; }
+.sheet[hidden] { display: none !important; }
+.gameList { display: grid; gap: 10px; margin: 6px 0 16px; }
+.gameList button { text-align: left; border: 0; border-radius: 16px; padding: 12px 16px; background: #fff; color: var(--bubble-ink); box-shadow: 0 4px 0 rgba(0,0,0,0.15); cursor: pointer; font: inherit; }
+.gameList button:active { transform: translateY(2px); }
+.gameList b { display: block; font: 800 20px var(--display); }
+.gameList span { font-size: 15px; opacity: 0.8; }
+.closeBtn { border: 0; border-radius: 999px; background: var(--yellow); color: var(--yellow-ink); font: 800 18px var(--display); padding: 10px 26px; cursor: pointer; }
+.guess h2 { font-size: 24px; }
+.guess .row { display: flex; gap: 12px; flex-wrap: wrap; }
+.guess .row button { flex: 1; min-width: 180px; border: 0; border-radius: 18px; padding: 18px; font: 800 22px var(--display); cursor: pointer; box-shadow: 0 5px 0 rgba(0,0,0,0.25); }
+#guessBreak { background: #ff5a4a; color: #fff; }
+#guessFine { background: #3ee08f; color: #0b2a18; }
+#gameBar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(122px + env(safe-area-inset-bottom, 0px)); z-index: 4; display: flex; gap: 10px; align-items: center; background: var(--panel); color: var(--ink); border-radius: 999px; padding: 8px 8px 8px 18px; font: 800 17px var(--display); box-shadow: 0 4px 0 rgba(0,0,0,0.35); max-width: calc(100% - 24px); white-space: nowrap; }
+#gameBar[hidden] { display: none !important; }
+#gameText { overflow: hidden; text-overflow: ellipsis; white-space: pre; }
+#gameBar button { border: 0; border-radius: 999px; padding: 8px 14px; background: var(--yellow); color: var(--yellow-ink); font: 800 15px var(--display); cursor: pointer; }
+#bookBody h3 { margin: 14px 0 6px; font-size: 19px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { background: #e9eef7; border-radius: 999px; padding: 4px 10px; font-size: 14px; }
+.chip.no { opacity: 0.35; }
 </style>
 
 <div id="app">
@@ -288,11 +313,35 @@ button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
         <li><b>Move a piece:</b> drag a loose piece around the table. Tap it to put it back.</li>
         <li><b>Look inside:</b> tap <b>Look inside</b>. Everything glowing blue has an inside. Tap one to shrink down inside it, then keep going deeper. <b>Back</b> climbs out.</li>
         <li><b>Learn more:</b> tap <b>Tell me more</b> to go deeper, from kid level all the way to grown-up science.</li>
+        <li><b>Games:</b> tap <b>Games</b> for Must-have parts (red ones it can't work without), Guess first, Find it, Rebuild race and your parts book.</li>
         <li><b>Sparky:</b> the robot says what to do next. Tap him to hear it again. The hand button turns his help on or off.</li>
       </ul>
       <button id="btnHelpClose" type="button">Got it!</button>
     </div>
   </div>
+  <div id="gamesCard" class="sheet" hidden>
+    <div class="helpInner">
+      <h2>Games</h2>
+      <div class="gameList">
+        <button type="button" data-game="crit"><b>Must-have parts</b><span>Red: it stops working without them. Orange: something changes. Green: nothing changes.</span></button>
+        <button type="button" data-game="guess"><b>Guess first</b><span>Before a piece comes off, guess: will it still work?</span></button>
+        <button type="button" data-game="find"><b>Find it!</b><span>Sparky names a part. Can you find it?</span></button>
+        <button type="button" data-game="rebuild"><b>Rebuild race</b><span>It all comes apart. Put it back together, fast!</span></button>
+        <button type="button" data-game="book"><b>My parts book</b><span>Every part you've found and every inside you've visited.</span></button>
+      </div>
+      <button id="btnGamesClose" class="closeBtn" type="button">Close</button>
+    </div>
+  </div>
+  <div id="guessCard" class="sheet" hidden>
+    <div class="helpInner guess">
+      <h2 id="guessQ"></h2>
+      <div class="row"><button id="guessBreak" type="button">It stops working</button><button id="guessFine" type="button">It still works</button></div>
+    </div>
+  </div>
+  <div id="bookCard" class="sheet" hidden>
+    <div class="helpInner"><h2>My parts book</h2><div id="bookBody"></div><button id="btnBookClose" class="closeBtn" type="button">Close</button></div>
+  </div>
+  <div id="gameBar" hidden><span id="gameText"></span><button id="btnGameStop" type="button">Stop</button></div>
   <div id="hand" hidden>
     <div class="ring"></div><div class="dot"></div>
     <div class="arrow"><svg viewBox="0 0 84 48" aria-hidden="true"><path d="M4 24h56" stroke="#ffc23a" stroke-width="10" stroke-linecap="round"/><path d="M50 8l26 16-26 16z" fill="#ffc23a"/></svg></div>
@@ -314,6 +363,7 @@ button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
     <button id="btnXray" class="tool" type="button"><span class="ic"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="lb">X-ray</span></button>
     <button id="btnApart" class="tool" type="button"><span class="ic"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3"/></svg></span><span class="lb">Take apart</span></button>
     <button id="btnLook" class="tool look" type="button"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg></span><span class="lb">Look inside</span></button>
+    <button id="btnGames" class="tool" type="button"><span class="ic"><svg viewBox="0 0 24 24"><path d="M6 9h12a4 4 0 0 1 4 4v1a3 3 0 0 1-5.2 2L15 14H9l-1.8 2A3 3 0 0 1 2 14v-1a4 4 0 0 1 4-4z"/><path d="M7 11.5v3M5.5 13h3"/><path d="M16 12.5h.01M18 14h.01"/></svg></span><span class="lb">Games</span></button>
     <button id="btnMission" class="tool" type="button"><span class="ic"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg></span><span class="lb">Fix-it mission</span></button>
   </nav>
 
@@ -356,3 +406,11 @@ button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
 <script src="js/learn.js"></script>
 <script src="js/worlds.js"></script>
 <script src="js/worlds-more.js"></script>
+<script src="js/learn-deep.js"></script>
+<script src="js/devices/remote.js"></script>
+<script src="js/devices/toaster.js"></script>
+<script src="js/devices/solar-light.js"></script>
+<script src="js/devices/toy-car.js"></script>
+<script src="js/devices/doorbell.js"></script>
+<script src="js/devices/controller.js"></script>
+<script src="js/devices/phone.js"></script>

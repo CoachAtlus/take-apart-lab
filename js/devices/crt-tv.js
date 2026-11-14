@@ -10,7 +10,7 @@ TAL.registerDevice({
   channelPart: 'chKnob',
   powerSound: 'crt',
   channels: true,
-  view: { target: [0, 2.2, 0], radius: 3.7, explodedRadius: 7.6, explodedY: 3.3, yaw: -0.55, pitch: 0.2, shadow: [5.2, 4.4] },
+  view: { target: [0, 2.2, 0], radius: 3.7, explodedRadius: 9.4, explodedY: 3.3, yaw: -0.55, pitch: 0.2, shadow: [5.2, 4.4] },
   intro: 'This is an old tube TV, the big boxy kind from long ago.',
   shellSay: "That's the wooden cabinet. It's the TV's outside shell, and everything else is hooked to it.",
   guide: [
@@ -30,7 +30,42 @@ TAL.registerDevice({
     const root = k.group();
     const body = k.at(k.group(), 0, 0.55, 0); // the cabinet sits on short legs
     root.add(body);
-    const wood = k.mat(0x8a5a2b, { roughness: 0.55 }), woodDark = k.mat(0x6a4220, { roughness: 0.6 }), trim = k.metal(0xd2bb8a, { roughness: 0.35 });
+    // real wood grain: a canvas texture, mapped so the grain runs along each board
+    const rnd = k.rng(5);
+    const grainTex = (base, lines, knots) => {
+      const t = k.canvasTex(512, 256, (c, w, h) => {
+        c.fillStyle = base; c.fillRect(0, 0, w, h);
+        for (let i = 0; i < 70; i++) { // soft wide bands
+          const y = rnd() * h;
+          c.fillStyle = `rgba(${rnd() < 0.5 ? '60,30,10' : '210,160,100'},${0.04 + rnd() * 0.07})`;
+          c.fillRect(0, y, w, 2 + rnd() * 9);
+        }
+        for (let i = 0; i < 150; i++) { // thin wavy grain lines
+          const y0 = rnd() * h, amp = 1 + rnd() * 5, f = 0.005 + rnd() * 0.012, ph = rnd() * 6.3;
+          c.strokeStyle = `rgba(${rnd() < 0.7 ? '50,24,8' : '230,185,120'},${0.08 + rnd() * 0.2})`;
+          c.lineWidth = 0.6 + rnd() * 1.2;
+          c.beginPath();
+          for (let x = 0; x <= w; x += 8) { const y = y0 + Math.sin(x * f * 6.28 + ph) * amp; if (x) c.lineTo(x, y); else c.moveTo(x, y); }
+          c.stroke();
+        }
+        for (let n = 0; n < knots; n++) { // a few knots, rings stretched along the grain
+          const kx = 60 + rnd() * (w - 120), ky = 30 + rnd() * (h - 60);
+          for (let r = 14; r > 1; r -= 2.5) { c.strokeStyle = `rgba(45,20,6,${0.28 - r * 0.012})`; c.lineWidth = 1.2; c.beginPath(); c.ellipse(kx, ky, r * 2.6, r * 0.8, 0, 0, 6.3); c.stroke(); }
+        }
+      });
+      t.wrapS = t.wrapT = T.RepeatWrapping;
+      return t;
+    };
+    const woodMat = k.mat(0xffffff, { map: grainTex('#8f5e2e', 150, 2), roughness: 0.55 });
+    const woodDarkMat = k.mat(0xffffff, { map: grainTex('#6e4523', 150, 1), roughness: 0.6 });
+    // a board whose texture scale follows its size (the texture covers about 4 x 2 units)
+    const woodBox = (w, h, d, m) => {
+      const g = new T.BoxGeometry(w, h, d), uv = g.attributes.uv;
+      const dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
+      dims.forEach(([du, dv], f) => { for (let i = 0; i < 4; i++) { const j = f * 4 + i; uv.setXY(j, uv.getX(j) * du / 4, uv.getY(j) * dv / 2); } });
+      return k.mesh(g, m);
+    };
+    const wood = woodMat, woodDark = woodDarkMat, trim = k.metal(0xd2bb8a, { roughness: 0.35 });
     const W = 4.4, H = 3.5, D = 3.6, TH = 0.15;
     const cx = -0.55, cy = 1.85, ow = 2.8, oh = 2.1; // screen opening
     const parts = [];
@@ -41,16 +76,16 @@ TAL.registerDevice({
     // ---- cabinet (not removable)
     const shell = k.group();
     body.add(shell);
-    shell.add(k.at(k.box(W, TH, D, wood), 0, H - TH / 2, 0));
-    shell.add(k.at(k.box(W, TH, D, wood), 0, TH / 2, 0));
-    shell.add(k.at(k.box(TH, H, D, wood), -W / 2 + TH / 2, H / 2, 0));
-    shell.add(k.at(k.box(TH, H, D, wood), W / 2 - TH / 2, H / 2, 0));
+    shell.add(k.at(woodBox(W, TH, D, wood), 0, H - TH / 2, 0));
+    shell.add(k.at(woodBox(W, TH, D, wood), 0, TH / 2, 0));
+    shell.add(k.at(woodBox(TH, H, D, wood), -W / 2 + TH / 2, H / 2, 0));
+    shell.add(k.at(woodBox(TH, H, D, wood), W / 2 - TH / 2, H / 2, 0));
     const fz = D / 2 - TH / 2, topH = H - (cy + oh / 2), botH = cy - oh / 2;
     const leftW = cx - ow / 2 + W / 2, rightW = W / 2 - (cx + ow / 2);
-    shell.add(k.at(k.box(W, topH, TH, woodDark), 0, H - topH / 2, fz));
-    shell.add(k.at(k.box(W, botH, TH, woodDark), 0, botH / 2, fz));
-    shell.add(k.at(k.box(leftW, oh, TH, woodDark), -W / 2 + leftW / 2, cy, fz));
-    shell.add(k.at(k.box(rightW, oh, TH, woodDark), W / 2 - rightW / 2, cy, fz));
+    shell.add(k.at(woodBox(W, topH, TH, woodDark), 0, H - topH / 2, fz));
+    shell.add(k.at(woodBox(W, botH, TH, woodDark), 0, botH / 2, fz));
+    shell.add(k.at(woodBox(leftW, oh, TH, woodDark), -W / 2 + leftW / 2, cy, fz));
+    shell.add(k.at(woodBox(rightW, oh, TH, woodDark), W / 2 - rightW / 2, cy, fz));
     const tz = D / 2 + 0.02;
     shell.add(k.at(k.box(ow + 0.12, 0.06, 0.05, trim), cx, cy + oh / 2 + 0.03, tz));
     shell.add(k.at(k.box(ow + 0.12, 0.06, 0.05, trim), cx, cy - oh / 2 - 0.03, tz));
@@ -72,11 +107,13 @@ TAL.registerDevice({
     const chKnob = k.at(k.group(knobInner), px, 2.45, D / 2 + 0.1);
     body.add(chKnob);
     add({ id: 'chKnob', name: 'Channel knob', obj: chKnob, pull: [1.3, 0.3, 1.5], level: 2, face: [0, 0, 1],
-      say: 'The channel knob! Turn it to pick a different show.', fact: 'Old TVs had about 13 channels. You clicked the knob around to find them.' });
+      say: 'The channel knob! Turn it to pick a different show.',
+      breaks: 'Now the channel is stuck on this show. The knob is how you pick a different one!', breaksAlways: true, fact: 'Old TVs had a big clunky knob. You clicked it around to find each channel.' });
     const volKnob = k.at(k.group(k.rot(k.cyl(0.16, 0.18, 0.14, k.mat(0x2a2522), 24), Math.PI / 2, 0, 0)), px, 1.8, D / 2 + 0.07);
     body.add(volKnob);
     add({ id: 'volKnob', name: 'Volume knob', obj: volKnob, pull: [1.3, -0.3, 1.5], level: 2, face: [0, 0, 1],
-      say: 'The volume knob makes the sound louder or quieter.' });
+      say: 'The volume knob makes the sound louder or quieter.',
+      breaks: 'Now nobody can turn the sound up, so the TV stays quiet!' });
 
     // ---- legs
     [[-1.8, 1.3], [1.8, 1.3], [-1.8, -1.3], [1.8, -1.3]].forEach(([x, z], i) => {
@@ -270,7 +307,7 @@ TAL.registerDevice({
     sub(speaker, 'speaker', { id: 'cone', name: 'Speaker cone', obj: k.group(k.mesh(sg, k.mat(0x3a3530, { side: T.DoubleSide, roughness: 0.9 })), k.sphere(0.07, k.mat(0x222222))), pull: [0, 0.6, 0.3], level: 3, face: [0, 0, 1],
       say: 'The cone wiggles super fast. That pushes the air, and the air carries the sound to your ears.', breaks: 'The sound stopped!' });
     sub(speaker, 'speaker', { id: 'magnet', name: 'Magnet', obj: k.at(k.group(k.rot(k.cyl(0.16, 0.16, 0.18, k.metal(0x8a8f96), 20), Math.PI / 2, 0, 0)), 0, 0, -0.2), pull: [0, -0.5, -0.5], level: 3, face: [0, 0, -1],
-      say: 'A strong magnet! It pushes and pulls the cone to make sound.', breaks: 'The sound stopped!', fact: 'Every speaker, even in headphones, has a magnet inside.' });
+      say: 'A strong magnet! It pushes and pulls the cone to make sound.', breaks: 'The sound stopped!', fact: 'Almost every speaker, even in headphones, has a magnet inside.' });
 
     // ---- main circuit board (slides out the back like a drawer) and its parts
     const board = k.board(3.6, 2.2, { seed: 11, count: 30 });
@@ -337,6 +374,6 @@ TAL.registerDevice({
       if (!has('jungle')) scr.gray = true;
     }
     const spk = has('speaker') && has('magnet') && has('cone');
-    return { alive: true, screen: scr, sound: { show: signal && spk && has('soundChip'), hiss: !signal && spk } };
+    return { alive: true, screen: scr, sound: { show: signal && spk && has('soundChip') && has('volKnob'), hiss: !signal && spk && has('volKnob') } };
   },
 });

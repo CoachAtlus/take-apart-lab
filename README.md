@@ -8,9 +8,16 @@ A 3D take-it-apart game for a 5-year-old. Pick a device, spin it around, tap par
 
 Devices so far, with pieces at Beginner / Medium / Advanced:
 
-- Old Tube TV: 9 / 20 / 44
+- Old Tube TV: 10 / 21 / 45
 - Flat LED TV: 21 / 109 / 266
 - Flashlight: 6 / 8 / 17
+- TV Remote: 7 / 14 / 25 (the invisible infrared flash shows up on a phone camera)
+- Toaster: 7 / 15 / 24 (glowing wires, a browning dial, toast that pops)
+- Solar Garden Light: 6 / 12 / 20 (a Day/Night dial charges and drains the battery)
+- Toy Car: 7 / 15 / 26 (motor, gears and wheels turn)
+- Doorbell: 5 / 11 / 16 (an electromagnet goes ding-dong)
+- Game Controller: 8 / 15 / 25 (rumble motors shake it)
+- Phone: 6 / 12 / 20
 
 Sparky, a talking robot, walks the kid through each device step by step: a glowing ring shows what to touch, an arrow shows which way to drag, and he nudges if nothing happens for a while.
 
@@ -22,15 +29,32 @@ Sparky, a talking robot, walks the kid through each device step by step: a glowi
 - Drag a part with a finger to pull it out (any direction works). Tap a pulled-out board to look closer and pick its pieces off.
 - Needs internet the first time for the font; three.js falls back to `vendor/three.min.js` offline.
 - Keys: `P` power, `C` channel, `X` x-ray, `Esc` back to devices.
-- Link straight to a device with `index.html#crt-tv`, `#led-tv`, or `#flashlight`.
+- Link straight to a device with `index.html#crt-tv`, `#led-tv`, `#flashlight`, `#remote`, `#toaster`, `#solar-light`, `#toy-car`, `#doorbell`, `#controller` or `#phone`.
 
 ## Going deeper
 
-- **Look inside:** tap the **Look inside** button and everything with an inside glows blue and gets a tag. Tap one to shrink down inside it (or touch a part and tap its floating magnifying glass). There are 29 worlds, several levels deep, for example:
+- **Look inside:** tap the **Look inside** button and everything with an inside glows blue and gets a tag. Tap one to shrink down inside it (or touch a part and tap its floating Look inside badge). There are 34 inside views, several levels deep, and almost every one has an experiment to try (a dial or a part to pull) with a result to watch. For example:
   - LED light > LED (20x) > LED chip (1,000x) > atoms making light (1,000,000x)
   - processor chip (10x) > the silicon (100x) > one transistor (1,000,000x) > silicon atoms (100,000,000x)
 - Others: wire > copper atoms, screw, resistor, fuse (watch the wire melt), magnet, heat sink, switch, circuit board, diode, battery and its chemistry, capacitor and its plates, LCD pixel and liquid crystal, speaker, transformer, and the picture tube and its phosphor dots.
 - The trail at the top shows where you are, and **Back** climbs out one level.
+- **Every pull teaches something:** if the device stops working, Sparky says what broke. If it still works, he says "Still works!" and what the part is for.
+
+## Games
+
+Tap **Games** on any device or inside view:
+
+- **Must-have parts:** every part turns red (it stops working without it), orange (it still works, but something changes) or green (nothing changes), with colored tags. The critical path at a glance.
+- **Guess first:** before a piece comes off, guess whether it will still work.
+- **Find it!:** Sparky names a part to find; every third round, find a must-have part.
+- **Rebuild race:** it all comes apart, then put it back together against the clock (inside pieces first). Best times are saved.
+- **My parts book:** every part found on every device, every inside view visited, and badges.
+
+The Fix-it mission (a broken part, a symptom, find it and replace it) works on every device.
+
+## Accuracy
+
+The teaching text was written by AI models, then fact-checked twice: one model checked about 900 claims (against web sources for anything specific) and fixed 32, and a second, different model independently re-checked those fixes and the claims the first couldn't verify. Details in `VERIFICATION.md`.
 - **Tell me more:** each tap goes one level deeper: For kids, How it works, How it's built, The science, Deep dive. The deeper levels live in `js/learn.js`, keyed by part name.
 - Drag up or down to look from above or underneath. The table turns with the device and fades away when you look from below.
 - Drag a loose piece to slide it around the table. Zoom with a pinch or the + and - buttons; zooming in centers on the last piece you touched.
@@ -40,7 +64,8 @@ Sparky, a talking robot, walks the kid through each device step by step: a glowi
 - `js/engine.js`: scene, camera, tapping, part animation, sound (all synthesized), speech, TV shows, particles, missions.
 - `js/devices/*.js`: one file per device. Each calls `TAL.registerDevice({...})`.
 - `js/worlds.js`: the zoomed-in worlds (`TAL.registerWorld`, same format as a device, plus `zoom`, `fixed` parts and inline `learn`). `TAL.insideByName` maps part names to worlds; a part can also set `inside: 'world-id'`.
-- `js/learn.js`: deeper explanations (levels 2 to 5) for every part name.
+- `js/learn.js`, `js/learn-deep.js`: deeper explanations by part name (`TAL.learn`, `TAL.deep`), "tell me more" for intros (`TAL.introMore`), and what non-essential parts are for (`TAL.jobs`).
+- `tools/`: `start-test.sh` + `shoot.mjs` drive headless Chrome; `regress.js` opens every device, level, inside view and game and reports errors.
 - three.js r128 as a plain global (`THREE`), so it all works from `file://` with no build step.
 
 ## Add a device
@@ -84,6 +109,9 @@ TAL.registerDevice({
         breaks: 'What stops working if you pull it while it is on.',
         fact: 'The "Tell me more" line.',
         symptom: 'If set, this part can be the broken one in a Fix-it mission.',
+        learn: ['Level 2 ...', 'Level 3 ...', 'Level 4 ...'], // Tell me more, deeper each tap (aim for 3+)
+        job: 'What it is for. Said as "Still works! ..." when pulling it changes nothing.',
+        onTap: (inst) => {},        // optional, for fixed parts: do something when tapped (a knob, a dial)
       }],
       screen,                       // from k.screen(...), optional
       refs: {},                     // anything apply() needs
@@ -94,6 +122,9 @@ TAL.registerDevice({
   evaluate(has, on) {
     return { alive: on && has('battery'), reason: 'Spoken if it will not turn on', screen: { mode: 'picture' }, sound: { show: true } };
   },
+
+  // optional: a step dial instead of the Power button (read inst.def.dial.steps[inst.dial || 0] in tick)
+  dial: { label: 'Electricity', steps: [{ name: 'Off', level: 0, say: '...' }, { name: 'Full', level: 1, say: '...' }] },
 
   apply(out, inst) { /* optional: light LEDs, show beams, etc. from out */ },
   tick(dt, t, inst, out) { /* optional: per-frame animation */ },

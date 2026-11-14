@@ -14,10 +14,10 @@
 
   const SERIES = 'These lights are wired in a line, like kids holding hands. If one lets go, the whole row goes out.';
   const LED_FACTS = [
-    'Inside each light is a tiny chip, smaller than a grain of sand. When electricity flows through it, it glows!',
+    'Inside each light is a tiny chip, about as small as a grain of sand. When electricity flows through it, it glows!',
     'The chip really makes blue light. A yellow coating on top mixes with it to make white light.',
     'LED stands for light emitting diode. It only lets electricity go one way.',
-    'LEDs barely get warm, so they last for many, many years.',
+    'LEDs waste much less energy as heat than old bulbs, so they can last for many, many years.',
     SERIES,
   ];
 
@@ -30,7 +30,7 @@
     screenPart: 'panel',
     powerSound: 'flat',
     channels: true,
-    view: { target: [0, 2.4, 0], radius: 3.5, explodedRadius: 7.8, explodedY: 3.2, yaw: -0.4, pitch: 0.14, shadow: [6.4, 2.6] },
+    view: { target: [0, 2.4, 0], radius: 3.5, explodedRadius: 9.8, explodedY: 3.2, yaw: -0.4, pitch: 0.14, shadow: [6.4, 2.6] },
     intro: 'This is a flat LED TV. It is built in layers, like a sandwich!',
     shellSay: "That's the metal back plate. All the layers and boards hang on it.",
 
@@ -239,7 +239,7 @@
         symptom: 'There are bright splotchy spots all over the picture.' });
       const filmSpecs = [
         ['film1', 'Diffuser film', 0.178, 'This thin sheet softens the light even more.', []],
-        ['film2', 'Brightness film', 0.168, 'This sheet bounces sideways light back so the screen looks brighter.', ['film1']],
+        ['film2', 'Brightness film', 0.168, 'This sheet bounces light that is going the wrong way back, so the screen looks brighter.', ['film1']],
         ['film3', 'Prism film', 0.158, 'This sheet has tiny ridges, like a mountain range, that point the light straight at you.', ['film2']],
       ];
       filmSpecs.forEach(([id, name, z, say, bl], i) => {
@@ -259,7 +259,7 @@
       add({ id: 'panel', name: 'LCD panel', obj: panel, pull: [6.4, 1.9, 1.2], blockedBy: ['bezel'], reach: ['bezel'], face: [0, 0, 1], focusRadius: 3,
         say: 'The LCD panel has millions of tiny shutters that open and close to make the colors.',
         breaks: 'Look! Without the panel there is just plain white light. The panel is what turns light into a picture.',
-        fact: 'Look really close at a TV and you can see tiny red, green and blue dots called pixels.' });
+        fact: 'Look really close at a TV and you can see tiny red, green and blue dots that team up to make each pixel.' });
       const stripes = k.canvasTex(96, 8, (c, w) => { ['#ff3030', '#30ff60', '#3060ff'].forEach((col, i) => { c.fillStyle = col; for (let x = i * 2; x < w; x += 6) c.fillRect(x, 0, 2, 8); }); });
       stripes.wrapS = T.RepeatWrapping; stripes.repeat.set(12, 1);
       const grid = k.canvasTex(64, 64, (c) => { c.fillStyle = '#9fd6ff'; c.fillRect(0, 0, 64, 64); c.clearRect(4, 4, 56, 56); });
@@ -280,7 +280,7 @@
           id, name, obj: g, at: [0, 0], z, pull: [0, 3.1 + z * 10, 0.4 + z * 18], blockedBy: above ? [above] : [], face: [0, 0, 1],
           say,
           breaks: id === 'polarF' ? 'The picture disappeared! It is still there, but you need the magic sunglasses sheet to see it.' : 'The picture is gone. Just white light!',
-          fact: id === 'polarF' ? 'Polarized sunglasses work the same way. Try looking at a phone screen with them and tilting your head!' : 'The panel is a sandwich of see-through layers, each thinner than paper.',
+          fact: id === 'polarF' ? 'Polarized sunglasses work the same way. Try looking at a phone screen with them and tilting your head!' : 'The panel is a sandwich of see-through layers, each very, very thin.',
           symptom: symptom || undefined,
         });
       });
@@ -289,7 +289,7 @@
         comp(panel, 'panel', {
           id: 'drv' + i, name: 'Driver chip', obj: drv, at: [-2.1 + i * 1.4, (H - 0.14) / 2 + 0.03], z: 0.016, pull: [0, 0.5, 0.5], face: [0, 0, 1],
           say: 'A driver chip! It sends signals to one part of the screen.',
-          breaks: 'A stripe of the picture went black!', fact: 'Each driver chip controls hundreds of columns of tiny dots.',
+          breaks: 'A stripe of the picture went black!', fact: 'Each driver chip controls lots of columns of tiny dots.',
           symptom: i === 1 ? 'A black stripe goes down the screen.' : undefined,
         });
       }
@@ -314,7 +314,8 @@
         say: 'The little red light glows when the TV is sleeping.' });
       const btn = k.group(k.at(k.box(0.14, 0.05, 0.06, 0x2a2c31), 0, 0, 0));
       comp(bezel, 'bezel', { id: 'powerBtn', name: 'Power button', obj: btn, at: [0.9, -H / 2 + 0.01], z: -0.01, pull: [0.2, -0.45, 0.4], face: [0, 0, 1],
-        say: 'The power button on the TV itself, for when the remote gets lost in the couch.' });
+        say: 'The power button on the TV itself, for when the remote gets lost in the couch.',
+        breaks: 'Now the TV has no way to switch on. The screen stays dark!' });
 
       // ---------- back cover (a tub) + 8 screws
       const coverMat = k.mat(0x1d1f24, { roughness: 0.8 });
@@ -353,7 +354,7 @@
         say: 'The blue surge guard protects the TV from big zaps, like lightning far away.', breaks: 'The TV still works, but it is not protected from big zaps anymore.', breaksAlways: true });
       P({ id: 'bridge', name: 'Bridge rectifier', obj: chip(0.26, 0.12, 0.08, 0x1b1b1b, 2), at: [-0.2, -0.5],
         say: 'The bridge rectifier turns wiggly electricity into electricity that flows only one way.', breaks: POWER_OFF,
-        fact: 'Wall electricity switches direction 60 times every second. Chips need it to flow one way, like a one-way street.' });
+        fact: 'Wall electricity swings back and forth 60 times every second. Chips need it to flow one way, like a one-way street.' });
       P({ id: 'bigcap1', name: 'Big capacitor', obj: elcap(0.16, 0.34, 0x1d2a5c), at: [-0.35, 0.28],
         say: 'A big capacitor! It stores electricity like a little water tank.', breaks: POWER_OFF,
         fact: 'Big capacitors can hold a zap even after unplugging. That is why grown-up fixers are so careful.', symptom: 'It will not turn on at all.' });
@@ -416,7 +417,7 @@
         say: 'The Wi-Fi module talks to the internet with invisible radio waves.', breaks: 'The TV can still show the game box, but it lost the internet.', breaksAlways: true });
       [0.35, 0.12, -0.11].forEach((y, i) => Mn({ id: 'hdmiP' + (i + 1), name: 'HDMI port', obj: port(0.14, 0.2, 0.12), at: [0.72, y], blockedBy: i === 0 ? ['hdmi'] : [],
         say: i === 0 ? 'The HDMI cable plugs into this port.' : 'Another HDMI port, for another game box.',
-        breaks: i === 0 ? 'No port, no show. It says No Signal!' : undefined, symptom: i === 0 ? 'The screen just says NO SIGNAL.' : undefined }));
+        breaks: i === 0 ? 'No port, no show on the game box channel. It says No Signal!' : undefined, symptom: i === 0 ? 'The screen just says NO SIGNAL.' : undefined }));
       Mn({ id: 'usb', name: 'USB port', obj: port(0.12, 0.09, 0.08), at: [0.72, -0.38], say: 'A USB port, for plugging in a memory stick.' });
       Mn({ id: 'lan', name: 'Network port', obj: port(0.16, 0.16, 0.14, 0x202a3a), at: [0.46, -0.42], say: 'The network port is for an internet cable.' });
       Mn({ id: 'crystal', name: 'Clock crystal', obj: crystal(), at: [0.08, -0.36],
@@ -425,7 +426,8 @@
       Mn({ id: 'amp', name: 'Sound chip', obj: chip(0.14, 0.14, 0.03, 0x1a1a1d, 4), at: [-0.2, -0.42],
         say: 'The sound chip makes the sound strong enough to push the speakers.', breaks: 'The sound stopped!', symptom: 'The picture works, but there is no sound at all.' });
       Mn({ id: 'tunerM', name: 'TV tuner', obj: k.group(k.at(k.box(0.3, 0.18, 0.08, M.silver), 0, 0, -0.04)), at: [-0.52, -0.4],
-        say: 'The tuner can pick up TV channels from an antenna.' });
+        say: 'The tuner can pick up TV channels from an antenna.',
+        breaks: 'Now the antenna channels say No Signal! Press the channel button to see. The game box channel still works.' });
       Mn({ id: 'spkConn', name: 'Speaker plug', obj: conn(0.14, 0.08, 0.08, 0xf2efe6, 4), at: [0.12, 0.48], blockedBy: ['wireL', 'wireR'],
         say: 'The speaker wires plug in here.', breaks: 'The sound stopped!' });
       Mn({ id: 'lvdsConn', name: 'Picture cable plug', obj: conn(0.3, 0.07, 0.07, 0xf2efe6, 8), at: [-0.2, 0.48], blockedBy: ['lvds'],
@@ -477,7 +479,7 @@
           say: 'The speaker cone wiggles back and forth super fast. That pushes the air, and the air carries the sound to your ears.', breaks: 'Now the sound only comes out of one side!',
           symptom: side === 'L' ? 'The sound only comes out of one side.' : undefined });
         comp(g, id, { id: 'mag' + side, name: 'Magnet', obj: k.group(k.at(k.rot(k.cyl(0.06, 0.06, 0.06, k.metal(0x8a8f96), 16), Math.PI / 2, 0, 0), 0, 0, -0.03)), at: [0, 0], z: -0.15, pull: [0.3, 0.3, -0.5], blockedBy: [],
-          say: 'A strong magnet! It pushes and pulls the cone to make sound.', breaks: 'Now the sound only comes out of one side!', fact: 'Every speaker, even in headphones, has a magnet inside.' });
+          say: 'A strong magnet! It pushes and pulls the cone to make sound.', breaks: 'Now the sound only comes out of one side!', fact: 'Almost every speaker, even in headphones, has a magnet inside.' });
         const tgt = side === 'L' ? [[-1.6, 1.3, -0.14], [-0.4, 1.42, -0.22], [1.0, 1.5, -0.22], [1.5, 2.0, -0.26], [1.52, 2.62, -0.16]] : [[1.6, 1.3, -0.14], [1.65, 1.6, -0.24], [1.55, 2.2, -0.26], [1.52, 2.62, -0.16]];
         const local = tgt.map((p) => [p[0] - pos[0], p[1] - pos[1], p[2] - pos[2]]);
         const wire = k.group(k.tube(local, 0.014, k.mat(0xc0392b, { roughness: 0.5 })), k.tube(local.map((p) => [p[0] + 0.03, p[1], p[2]]), 0.014, k.mat(0x111111, { roughness: 0.5 })));
@@ -507,7 +509,7 @@
       );
       root.add(hdmiObj);
       add({ id: 'hdmi', name: 'HDMI cable', obj: hdmiObj, pull: [1.0, 0, -1.3], noSpark: true, face: [0, 0, -1],
-        say: 'The HDMI cable brings the show in from a game or a streaming box.', breaks: 'No cable, no show. The TV says No Signal!',
+        say: 'The HDMI cable brings the show in from a game or a streaming box.', breaks: 'No cable, so the game box channel says No Signal!',
         fact: 'One HDMI cable carries the picture and the sound together through 19 tiny wires.' });
       const lvdsObj = k.group(k.tube([[1.2, 2.68, -0.15], [0.9, 3.0, -0.19], [-0.2, 3.15, -0.19], [-0.6, 3.43, -0.15]], 0.03, k.mat(0xb8bcc4, { roughness: 0.4 })));
       root.add(lvdsObj);
@@ -542,6 +544,7 @@
       if (!on) return out;
       if (!has('cord')) { out.reason = "It's not plugged in! Put the power cord back."; return out; }
       if (!psuOK) { out.reason = 'Something on the power board is missing, so no electricity gets in.'; return out; }
+      if (!has('powerBtn')) { out.reason = "The power button is missing, so there's no way to switch the TV on."; return out; }
       out.alive = true;
       if (!(has('mainboard') && has('harness') && has('outConn') && all(BRAIN))) {
         out.screen = { mode: 'black' }; out.reason = "Something on the main board is missing, so the TV can't think."; return out;
@@ -555,7 +558,12 @@
       const lit = out.strips.reduce((a, b) => a + b, 0) / ROWS;
       const reflect = has('reflector') ? 1 : 0.8;
       out.glow = +(lit * reflect).toFixed(3);
-      const signal = has('hdmi') && has('hdmiP1');
+      // Channel 1 is the game box (HDMI). The other channels come from an antenna, through the tuner.
+      const mis = TAL.app && TAL.app.mission, brokenNow = mis && !mis.fixedPart ? mis.broken : null;
+      const chan = (TAL.app && TAL.app.channel) || 0;
+      const gameBox = has('hdmi') && has('hdmiP1'), antenna = has('tunerM');
+      const signal = chan === 0 || brokenNow === 'hdmiP1' ? gameBox : antenna;
+      out.inputs = [gameBox, antenna];
       const feed = has('lvds') && has('lvdsConn') && has('tcon') && has('tconLvds');
       const films = ['film1', 'film2', 'film3'].filter((id) => !has(id)).length;
       const scr = { mode: signal ? 'picture' : 'nosignal', dim: +((lit === 0 ? 0.07 : 1) * Math.pow(0.85, films) * reflect).toFixed(3) };

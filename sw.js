@@ -1,8 +1,8 @@
 /* Offline cache for the home-screen app. Bump VERSION when files change. */
-const VERSION = 'tal-v11';
+const VERSION = 'tal-v12';
 const FILES = [
   './', './index.html', './manifest.json',
-  './js/engine.js', './js/devices/crt-tv.js', './js/devices/led-tv.js', './js/devices/flashlight.js', './js/learn.js', './js/worlds.js', './js/worlds-more.js', './og-image.png',
+  './js/engine.js', './js/devices/crt-tv.js', './js/devices/led-tv.js', './js/devices/flashlight.js', './js/learn.js', './js/worlds.js', './js/worlds-more.js', './js/learn-deep.js', './js/devices/remote.js', './js/devices/toaster.js', './js/devices/solar-light.js', './js/devices/toy-car.js', './js/devices/doorbell.js', './js/devices/controller.js', './js/devices/phone.js', './og-image.png',
   './vendor/three.min.js', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png',
 ];
 self.addEventListener('install', (e) => {

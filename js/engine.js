@@ -11,6 +11,9 @@
   TAL.worlds = TAL.worlds || {};
   TAL.registerWorld = (d) => { TAL.worlds[d.id] = d; };
   TAL.insideByName = TAL.insideByName || {}; // part name -> world id
+  TAL.jobs = TAL.jobs || {};       // part name -> what it's for, when pulling it doesn't stop anything
+  TAL.deep = TAL.deep || {};       // part name -> deeper explanation levels (used when longer than the part's own)
+  TAL.introMore = TAL.introMore || {}; // device or world id -> 'tell me more' levels for its intro
 
   // ---------------------------------------------------------------- utils
   const $ = (s) => document.querySelector(s);
@@ -170,7 +173,7 @@
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, toneMapped: false }));
       const hgt = o.size || 0.2;
       sp.scale.set((hgt * cv.width) / cv.height, hgt, 1);
-      sp.renderOrder = 20; sp.userData.noPick = true;
+      sp.renderOrder = 20; sp.userData.noPick = true; sp.userData.isLabel = true; sp.userData.base = sp.scale.clone();
       return sp;
     };
     // Glowing dots that travel along a path: electrons, light, magnetism. obj.userData.flow.update(dt, speed).
@@ -892,7 +895,8 @@
   function brokenId() { const M = App.mission; return M && !M.fixedPart ? M.broken : null; }
   function evaluate(inst, on, opts) {
     const ideal = opts && opts.ideal, broken = ideal ? null : brokenId();
-    const has = (id) => { const p = inst.byId[id]; if (!p || ideal) return true; return p.target === 0 && id !== broken; };
+    const force = opts && opts.force;
+    const has = (id) => { if (force && id in force) return force[id]; const p = inst.byId[id]; if (!p || ideal) return true; return p.target === 0 && id !== broken; };
     const out = inst.def.evaluate(has, on, inst) || {};
     out.alive = !!out.alive;
     out.screen = out.screen || { mode: 'off' };
@@ -962,6 +966,23 @@
     const at = App.focus ? worldPos(App.focus) : new THREE.Vector3(0, App.inst.def.view.target[1] + 1.5, 0);
     confetti.emit(at, 220, { speed: 7, upBias: 1.4, up: 3, life: 3, colors: ['#ff5b4f', '#ffc23a', '#3ee08f', '#58b8ff', '#c77dff', '#ffffff'], spread: 1 });
   }
+  // Does the thing still work without this part? Compares 'powered on, with it' to 'powered on, without it'.
+  function matters(p, inst) {
+    inst = inst || App.inst;
+    try { return sig(evaluate(inst, true, { force: { [p.id]: true } })) !== sig(evaluate(inst, true, { force: { [p.id]: false } })); } catch (e) { return true; }
+  }
+  // 2 = it stops working without this part, 1 = it still works but something changes, 0 = nothing changes.
+  // whole = judge against the fully built device (the real critical path), not how it sits right now.
+  function impactOf(p, whole, inst) {
+    inst = inst || App.inst;
+    try {
+      const a = evaluate(inst, true, { ideal: !!whole, force: { [p.id]: true } }), b = evaluate(inst, true, { ideal: !!whole, force: { [p.id]: false } });
+      if (a.alive !== b.alive) return 2;
+      return sig(a) !== sig(b) ? 1 : 0;
+    } catch (e) { return 1; }
+  }
+  // What a part is for, when taking it out doesn't stop anything.
+  function jobOf(p) { return p.job || (TAL.jobs && TAL.jobs[p.name]) || ''; }
   function discover(p) {
     const id = App.inst.def.id;
     const set = App.found[id] || (App.found[id] = new Set(store.get('tal-found-' + id, [])));
@@ -994,7 +1015,9 @@
   }
   // Deeper explanations: the part's own `learn`, else js/learn.js by name, else its one `fact`.
   function learnFor(p) {
-    const lv = (p.learn && p.learn.length ? p.learn : null) || (TAL.learn && TAL.learn[p.name]) || (p.fact ? [p.fact] : []);
+    let lv = (p.learn && p.learn.length ? p.learn : null) || (TAL.learn && TAL.learn[p.name]) || (p.fact ? [p.fact] : []);
+    const deep = TAL.deep && TAL.deep[p.name];
+    if (deep && deep.length > lv.length) lv = deep;
     return lv.length ? { levels: lv, i: 0 } : null;
   }
   // Fixed parts (in the zoomed-in worlds) don't come off; touching them explains them.
@@ -1009,6 +1032,7 @@
     if (p.fixed) { if (!(o && o.quiet)) explain(p); return false; }
     const blockers = blockersOf(p);
     if (blockers.length) { if (!(o && o.quiet)) blocked(p, blockers, false); return false; }
+    if (!(o && o.quiet) && guessGate(p, () => removePart(p, o))) return false;
     removePart(p, o);
     return true;
   }
@@ -1033,7 +1057,10 @@
     if (zapped) { sparkAt(p); Sound.zap(); }
     if (!o.quiet) {
       const showBreak = p.breaks && before.alive && (changed || p.breaksAlways);
-      Voice.say(showBreak ? `${p.say} ${p.breaks}` : p.say, learnFor(p), false, showBreak ? [p.say, p.breaks] : p.say);
+      // Not on the critical path: say so, and say what the part is for.
+      const still = !showBreak && !p.fixed && !matters(p) && evaluate(App.inst, true).alive ? `Still works! ${jobOf(p) || 'It does not need this part to work.'}` : '';
+      const line = showBreak ? `${p.say} ${p.breaks}` : still ? `${p.say} ${still}` : p.say;
+      Voice.say(line, learnFor(p), false, showBreak ? [p.say, p.breaks] : still ? [p.say, still] : p.say);
       Caption.setPart(p);
     }
     if (!o.noGuide) Guide.advance();
@@ -1154,6 +1181,7 @@
     exitFocus();
     const depth = {};
     const d = (p) => {
+      if (!p) return 0; // a part that doesn't exist at this level
       if (depth[p.id] != null) return depth[p.id];
       depth[p.id] = 0;
       let v = p.blockedBy.length ? 1 + Math.max(...p.blockedBy.map((b) => d(byId(b)))) : 0;
@@ -1163,7 +1191,7 @@
     const order = inst.parts.filter(isOut).sort((a, b) => d(b) - d(a));
     const gap = clamp(4500 / Math.max(1, order.length), 22, 150);
     order.forEach((p, i) => setTimeout(() => { if (token === App.seq && p.target === 1) putBack(p, { quiet: true, noGuide: true }); }, i * gap));
-    if (!silent) setTimeout(() => { if (token === App.seq) { Voice.say(App.on ? 'All back together!' : 'All back together! Press power to see if it works.'); updateUI(); } }, order.length * gap + 400);
+    if (!silent) setTimeout(() => { if (token === App.seq) { Voice.say(App.on || inst.def.dial ? 'All back together!' : 'All back together! Press power to see if it works.'); updateUI(); } }, order.length * gap + 400);
   }
   function startMission() {
     const inst = App.inst;
@@ -1390,9 +1418,11 @@
       return;
     }
     const p = hit.part;
+    if (App.game && App.game.type === 'find') { findTap(p); return; }
+    if (App.game && App.game.type === 'rebuild' && !App.game.waiting && p.target !== 0) { putBack(p); return; }
     if (App.lookMode && p.hasInside) { diveInto(p); return; }
     if (App.focus && p === App.focus) { Voice.say(`${p.say} Pull its pieces off with your finger!`, learnFor(p), false, [p.say, 'Pull its pieces off with your finger!']); Caption.setPart(p); return; }
-    if (p.fixed) { explain(p); return; }
+    if (p.fixed) { if (p.onTap) { p.pulse = 1; Sound.click(); p.onTap(App.inst); } else explain(p); return; }
     if (p.target === 0) tryRemove(p);
     else if (p.kids.length && !App.focus) enterFocus(p);
     else putBack(p);
@@ -1470,7 +1500,7 @@
         if (Math.floor(prog * 6) > Math.floor(drag.prog * 6) && part.kind === 'screw') Sound.tick();
         drag.prog = prog;
         part.t = prog * 0.92;
-        if (prog >= 1) { drag.mode = 'done'; removePart(part); }
+        if (prog >= 1) { drag.mode = 'done'; if (!guessGate(part, () => removePart(part))) removePart(part); }
       } else if (drag.mode === 'spin' && App.focus) {
         App.focus.spinYaw += dx * 0.012;
         App.focus.spinPitch = clamp(App.focus.spinPitch + dy * 0.01, -1.4, 1.4);
@@ -1487,7 +1517,7 @@
       if (pointers.size < 2) pinch = null;
       if (drag && drag.mode === 'pull') {
         const part = drag.part;
-        if (drag.prog > 0.3) removePart(part);
+        if (drag.prog > 0.3 && !guessGate(part, () => removePart(part))) removePart(part);
         else { part.manual = false; Sound.boing(); }
         drag.mode = 'done';
       }
@@ -1552,6 +1582,7 @@
     $('#btnXray').classList.toggle('active', App.xray);
     $('#btnMission').classList.toggle('active', !!App.mission);
     $('#btnLook').hidden = !inst.parts.some((p) => p.hasInside);
+    $('#btnApart').hidden = !inst.parts.some((p) => !p.fixed);
     $('#btnSound').classList.toggle('off', Sound.muted);
     $('#btnVoice').classList.toggle('off', !Voice.on);
     $('#btnGuide').classList.toggle('off', !Guide.on);
@@ -1577,6 +1608,7 @@
   function disposeStack() { App.stack.forEach((st) => disposeTree(st.inst.root)); App.stack = []; }
   function loadInst(def, level, world) {
     setLookMode(false);
+    endGame(true);
     const inst = instantiate(def, kit, level);
     if (!world) {
       const sh = def.view.shadow || [5, 4];
@@ -1615,10 +1647,12 @@
     App.level = level;
     loadInst(def, level, false);
     App.R = def.view.radius;
+    const kinds = new Set(App.inst.parts.map((q) => q.name)).size;
+    if (kinds > store.get('tal-total-' + def.id, 0)) store.set('tal-total-' + def.id, kinds);
     Caption.setPart(null);
     const first = !store.get('tal-safety', false);
     store.set('tal-safety', true);
-    Voice.say(def.intro + (first ? ' ' + SAFETY : ''), null, false, first ? [def.intro, SAFETY] : def.intro);
+    Voice.say(def.intro + (first ? ' ' + SAFETY : ''), TAL.introMore[def.id] ? { levels: TAL.introMore[def.id], i: 0 } : null, false, first ? [def.intro, SAFETY] : def.intro);
     Guide.advance();
     try { history.replaceState(null, '', '#' + def.id); } catch (e) { /* ignore */ }
   }
@@ -1652,11 +1686,14 @@
       App.R = d.def.view.radius * 0.12; // start up close, then fly out
       $('#zoomFx').className = 'out';
       Caption.setPart(null);
-      Voice.say(d.def.intro, d.def.learn ? { levels: d.def.learn, i: 0 } : null);
+      markVisited(d.def.id);
+      const more = d.def.learn || (TAL.introMore && TAL.introMore[d.def.id]);
+      Voice.say(d.def.intro, more ? { levels: more, i: 0 } : null);
     }, 620);
   }
   function goBack() {
     setLookMode(false);
+    endGame(true);
     if (!App.stack.length) { goHome(); return; }
     App.seq++;
     Voice.stop();
@@ -1703,6 +1740,7 @@
     $('#btnHome .lbl').textContent = App.stack.length ? 'Back' : 'Devices';
   }
   function goHome() {
+    endGame(true);
     App.seq++;
     Voice.stop();
     Sound.setTV({});
@@ -1908,6 +1946,13 @@
       Caption.setPart(null);
     });
     on('#btnHelp', () => { $('#helpCard').hidden = false; });
+    on('#btnGames', openGames);
+    on('#btnGamesClose', () => { $('#gamesCard').hidden = true; });
+    on('#btnBookClose', () => { $('#bookCard').hidden = true; });
+    on('#btnGameStop', () => endGame());
+    on('#guessBreak', () => answerGuess(true));
+    on('#guessFine', () => answerGuess(false));
+    document.querySelectorAll('#gamesCard [data-game]').forEach((b) => b.addEventListener('click', () => { Sound.unlock(); startGame(b.dataset.game); }));
     on('#btnHelpClose', () => { $('#helpCard').hidden = true; });
     on('#btnMission', startMission);
     on('#btnHint', hint);
@@ -2017,12 +2062,20 @@
       if (p.pulse > 0) p.pulse -= dt;
       const glow = (p === App.hovered ? 0.4 : 0) + (p.pulse > 0 ? (0.5 + 0.5 * Math.sin(t * 12)) * 0.7 : 0) + (p === guidePart ? (0.5 + 0.5 * Math.sin(t * 5)) * 0.55 : 0);
       const lg = App.lookMode && p.hasInside ? 0.45 + 0.3 * Math.sin(t * 4) : 0;
-      if (Math.abs(glow - p.glowNow) > 0.01 || Math.abs(lg - (p.lgNow || 0)) > 0.01) {
-        p.glowNow = glow; p.lgNow = lg;
+      const cm = App.critMode ? 0.65 : 0, cc = p.crit || 0;
+      if (Math.abs(glow - p.glowNow) > 0.01 || Math.abs(lg - (p.lgNow || 0)) > 0.01 || cm !== (p.cmNow || 0) || cc !== p.ccNow) {
+        p.glowNow = glow; p.lgNow = lg; p.cmNow = cm; p.ccNow = cc;
         p.meshes.forEach((m) => {
           const mat = m.material;
           if (!mat.emissive || mat.userData.selfLit) return;
-          mat.emissive.setHex(mat.userData.e0 || 0).lerp(LOOK_GLOW, Math.min(1, lg)).lerp(GLOW, Math.min(1, glow));
+          mat.emissive.setHex(mat.userData.e0 || 0).lerp(LOOK_GLOW, Math.min(1, lg));
+          if (cm) {
+            const tint = cc === 2 ? CRIT_RED : cc === 1 ? CRIT_ORANGE : CRIT_GREEN;
+            if (mat.userData.c0 == null && mat.color) mat.userData.c0 = mat.color.getHex();
+            if (mat.color) mat.color.setHex(mat.userData.c0).lerp(tint, 0.92);
+            mat.emissive.copy(tint).multiplyScalar(0.28);
+          } else if (mat.userData.c0 != null) { mat.color.setHex(mat.userData.c0); mat.userData.c0 = null; }
+          mat.emissive.lerp(GLOW, Math.min(1, glow));
         });
       }
       if (p.smoke) {
@@ -2045,6 +2098,8 @@
     placeHand();
     placeLook();
     placeLookTags();
+    gameTick(dt);
+    layoutLabels();
     autoQuality(dt);
   }
   // The magnifying glass floats over the last part you touched, if there's a world inside it.
@@ -2066,34 +2121,44 @@
   // In look-inside mode, one tag per kind of part (the nearest one you can see), so it never gets crowded.
   function placeLookTags() {
     const box = $('#lookTags');
-    if (!App.lookMode || !App.inst || App.diving) { if (box.childElementCount) box.innerHTML = ''; return; }
+    const crit = !App.lookMode && App.critMode;
+    if ((!App.lookMode && !crit) || !App.inst || App.diving) { if (box.childElementCount) box.innerHTML = ''; return; }
     App.lookTagT = (App.lookTagT || 0) - 1;
     const best = new Map();
     App.inst.parts.forEach((p) => {
-      if (!p.hasInside) return;
+      if (crit ? p.fixed || p.crit == null : !p.hasInside) return;
       const w = worldPos(p), sc = toScreen(w);
       if (sc.x < 20 || sc.y < 80 || sc.x > innerWidth - 20 || sc.y > innerHeight - 110) return;
       const d = w.distanceTo(camera.position), cur = best.get(p.name);
       if (!cur || d < cur.d) best.set(p.name, { p, d, sc });
     });
-    const list = [...best.values()].sort((a, b) => a.d - b.d).slice(0, 10);
+    const list = [...best.values()].sort((a, b) => a.d - b.d).slice(0, crit ? 12 : 10);
     // nudge tags up so they don't sit on top of each other
-    const placed = [];
+    const placed = [], cap = $('#caption'), minY = cap.classList.contains('show') ? cap.getBoundingClientRect().bottom + 44 : 110;
+    const shown = [];
     list.forEach((it) => {
       let y = it.sc.y;
       for (let n = 0; n < 8 && placed.some((q) => Math.abs(q.x - it.sc.x) < 120 && Math.abs(q.y - y) < 32); n++) y -= 34;
+      if (y < minY || y > innerHeight - 120) return; // would cover the caption or the toolbar: leave it out
       it.sc = { x: it.sc.x, y };
-      placed.push(it.sc);
+      placed.push(it.sc); shown.push(it);
     });
+    list.length = 0; list.push(...shown);
     while (box.childElementCount < list.length) {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'lookTag';
-      b.addEventListener('click', () => { if (b._part) diveInto(b._part); });
+      b.addEventListener('click', () => {
+        const q = b._part; if (!q) return;
+        if (App.lookMode) { diveInto(q); return; }
+        q.pulse = 1.5;
+        Voice.say(q.crit === 2 ? `The ${lower(q.name)} is a must-have. Without it, it stops working.` : q.crit === 1 ? `Without the ${lower(q.name)} it still works, but something changes.` : `The ${lower(q.name)} can go, and nothing changes. ${jobOf(q)}`);
+      });
       box.appendChild(b);
     }
     while (box.childElementCount > list.length) box.lastChild.remove();
     list.forEach((it, i) => {
       const b = box.children[i];
-      if (b._part !== it.p) { b._part = it.p; b.textContent = it.p.name; }
+      const cls = crit ? 'lookTag crit' + it.p.crit : 'lookTag';
+      if (b._part !== it.p || b.className !== cls) { b._part = it.p; b.textContent = it.p.name; b.className = cls; }
       b.style.transform = `translate(${Math.round(it.sc.x)}px, ${Math.round(it.sc.y)}px) translate(-50%, -130%)`;
     });
   }
@@ -2103,7 +2168,220 @@
     const sc = toScreen(worldPos(p));
     if (sc.x < 0 || sc.y < 0 || sc.x > innerWidth || sc.y > innerHeight) { b.hidden = true; return; }
     b.hidden = false;
-    b.style.transform = `translate(${Math.min(innerWidth - 150, sc.x + 18)}px, ${Math.max(70, sc.y - 64)}px)`;
+    let by = Math.max(70, sc.y - 64);
+    const cap = $('#caption');
+    if (cap.classList.contains('show')) { const r = cap.getBoundingClientRect(), bx = Math.min(innerWidth - 150, sc.x + 18); if (bx + 150 > r.left && bx < r.right && by < r.bottom + 8) by = r.bottom + 10; }
+    b.style.transform = `translate(${Math.min(innerWidth - 150, sc.x + 18)}px, ${by}px)`;
+  }
+  // ---------------------------------------------------------------- games
+  // Must-have parts (critical path), Guess first, Find it, Rebuild race, and the parts book.
+  const CRIT_RED = new THREE.Color(0xff3a2a), CRIT_ORANGE = new THREE.Color(0xffa020), CRIT_GREEN = new THREE.Color(0x2fd27a);
+  function computeCrit() {
+    const c = { n: 0, o: 0, m: 0 };
+    if (!App.inst) return c;
+    App.inst.parts.forEach((p) => { p.crit = impactOf(p, true); if (!p.fixed) { if (p.crit === 2) c.n++; else if (p.crit === 1) c.o++; else c.m++; } });
+    return c;
+  }
+  function setGameBar(text) { const b = $('#gameBar'); b.hidden = !text; if (text) $('#gameText').textContent = text; }
+  function endGame(quiet) {
+    const g = App.game;
+    App.game = null; App.critMode = false;
+    setGameBar(''); $('#guessCard').hidden = true;
+    if (g && !quiet) Caption.show('Game over. Tap Games to play another one!');
+  }
+  function openGames() { if (!App.inst) return; Sound.click(); $('#gamesCard').hidden = false; }
+  function reachable(p) {
+    if (!p.meshes.length || !p.obj.visible) return false;
+    if (p.target === 0 && blockersOf(p).length && !p.fixed) return false;
+    const sc = toScreen(worldPos(p));
+    return sc.x > 30 && sc.x < innerWidth - 30 && sc.y > 120 && sc.y < innerHeight - 130;
+  }
+  function startGame(type) {
+    $('#gamesCard').hidden = true;
+    if (type === 'book') { openBook(); return; }
+    endGame(true);
+    if (!App.inst) return;
+    exitFocus(); setLookMode(false);
+    if (type === 'crit') {
+      App.critMode = true; App.game = { type };
+      const c = computeCrit();
+      Sound.whoosh();
+      Voice.say(`Red parts are must-haves: take one out and it stops working. Orange parts change something, but it still works. Green parts can come out and nothing changes. There are ${c.n} red, ${c.o} orange and ${c.m} green. Try one of each!`, null, false,
+        ['Red parts are must-haves: take one out and it stops working.', 'Orange parts change something, but it still works.', 'Green parts can come out and nothing changes.', 'Try one of each!']);
+    } else if (type === 'guess') {
+      App.game = { type, right: 0, total: 0 };
+      if (!App.on && App.inst.def.evaluate) togglePower();
+      Voice.say('Guess first! Pull a piece. Before it comes off, guess: will it stop working, or still work?');
+    } else if (type === 'find') {
+      App.game = { type, score: 0, round: 0, misses: 0, used: [] };
+      nextFind();
+    } else if (type === 'rebuild') {
+      App.game = { type, t0: null, waiting: true };
+      if (App.inst.parts.some((p) => !p.fixed && p.target === 0)) explodeAll();
+      Voice.say('Rebuild race! Everything comes apart first. Then put it back together as fast as you can. Inside pieces go in first!');
+    }
+    gameBarNow();
+  }
+  // Guess first: stop the pull, ask, then do it.
+  function guessGate(p, go) {
+    const g = App.game;
+    if (!g || g.type !== 'guess' || p.fixed || g.pending) return false;
+    g.pending = { p, go, impact: impactOf(p) };
+    $('#guessQ').textContent = `What happens if you take out the ${lower(p.name)}?`;
+    $('#guessCard').hidden = false;
+    Voice.say(`Guess! What happens if you take out the ${lower(p.name)}? Will it stop working, or still work?`);
+    return true;
+  }
+  function answerGuess(saysBreak) {
+    const g = App.game;
+    if (!g || !g.pending) return;
+    const { go, impact } = g.pending;
+    g.pending = null; $('#guessCard').hidden = true;
+    g.total++;
+    const right = saysBreak === (impact === 2);
+    if (right) g.right++;
+    go();
+    const what = impact === 2 ? 'It stopped working. That part is a must-have!' : impact === 1 ? 'It still works, but something changed. Look closely!' : 'It still works, and nothing changed.';
+    const msg = `${right ? 'You guessed it!' : 'Surprise!'} ${what}`;
+    if (right) Sound.fanfare(); else Sound.bonk();
+    Voice.say(msg, null, true);
+    gameBarNow();
+  }
+  // Find it: Sparky names a part, you tap it. Every third round: find a must-have part.
+  function nextFind() {
+    const g = App.game;
+    if (!g || g.type !== 'find' || !App.inst) return;
+    g.round++; g.misses = 0; g.target = null; g.mode = 'name';
+    const cands = App.inst.parts.filter(reachable);
+    if (g.round % 3 === 0 && cands.some((p) => impactOf(p, true) === 2)) {
+      g.mode = 'crit';
+      Voice.say('Find a part it cannot work without! Tap one you think is a must-have.');
+    } else {
+      const names = [...new Set(cands.map((p) => p.name))];
+      const fresh = names.filter((n) => g.used.indexOf(n) < 0);
+      const pool = fresh.length ? fresh : names;
+      if (!pool.length) { Voice.say('Turn it or take a few pieces off, then try Find it again!'); endGame(true); return; }
+      const name = pool[Math.floor(Math.random() * pool.length)];
+      g.used.push(name); g.target = cands.find((p) => p.name === name);
+      Voice.say(`Find the ${lower(name)}!`);
+    }
+    gameBarNow();
+  }
+  function findTap(p) {
+    const g = App.game;
+    const ok = g.mode === 'crit' ? impactOf(p, true) === 2 : g.target && p.name === g.target.name;
+    if (ok) {
+      g.score++; p.pulse = 1.5; Sound.fanfare();
+      Voice.say(g.mode === 'crit' ? `Yes! It cannot work without the ${lower(p.name)}.` : `You found the ${lower(p.name)}! ${p.say || ''}`);
+      g.target = null; g.mode = 'wait';
+      setTimeout(() => { if (App.game === g) nextFind(); }, 3200);
+    } else if (g.mode !== 'wait') {
+      g.misses++; Sound.bonk();
+      if (g.mode === 'crit') {
+        Voice.say(`It still works without the ${lower(p.name)}. Find one it cannot work without!`);
+        if (g.misses >= 2) { const c = App.inst.parts.find((q) => reachable(q) && impactOf(q, true) === 2); if (c) c.pulse = 2; }
+      } else {
+        Voice.say(`That is the ${lower(p.name)}. Find the ${lower(g.target.name)}!`);
+        if (g.misses >= 2) g.target.pulse = 2;
+      }
+    }
+    gameBarNow();
+  }
+  function gameBarNow() {
+    const g = App.game;
+    if (!g) { setGameBar(''); return; }
+    if (g.type === 'crit') { const c = g.c || computeCrit(); setGameBar(`Red = stops it (${c.n})   Orange = changes it (${c.o})   Green = can go (${c.m})`); }
+    else if (g.type === 'guess') setGameBar(`Guess first: ${g.right} right out of ${g.total}`);
+    else if (g.type === 'find') setGameBar(g.mode === 'crit' ? `Find a must-have part!   Found: ${g.score}` : g.target ? `Find the ${lower(g.target.name)}!   Found: ${g.score}` : `Found: ${g.score}`);
+    else if (g.type === 'rebuild') {
+      if (g.waiting) setGameBar('Rebuild race: taking it apart...');
+      else if (g.final != null) setGameBar(`Rebuilt in ${Math.round(g.final)} seconds!`);
+      else setGameBar(`Rebuild race: ${Math.floor(App.time - g.t0)} s   ${g.left} pieces to go`);
+    }
+  }
+  function gameTick(dt) {
+    const g = App.game;
+    if (!g || !App.inst) return;
+    g.ui = (g.ui || 0) - dt;
+    if (g.type === 'rebuild') {
+      const rem = App.inst.parts.filter((p) => !p.fixed);
+      g.left = rem.filter((p) => p.target !== 0).length;
+      if (g.waiting) {
+        if (g.left === rem.length && rem.every((p) => p.t > 0.98)) {
+          g.waiting = false; g.t0 = App.time;
+          Sound.fanfare();
+          Voice.say('Go! Tap a piece to put it back. Inside pieces go in first!');
+        }
+      } else if (g.left === 0 && g.final == null) {
+        g.final = App.time - g.t0;
+        const key = `tal-best-${App.inst.def.id}-${App.inst.level || 1}`, best = store.get(key, null), nb = best == null || g.final < best;
+        if (nb) store.set(key, g.final);
+        confettiBurst(); Sound.fanfare();
+        Voice.say(`You rebuilt it in ${Math.round(g.final)} seconds! ${nb ? 'That is your best time ever!' : `Your best is ${Math.round(best)} seconds.`}`);
+      }
+    }
+    if (g.ui <= 0) {
+      g.ui = 0.4;
+      if (g.type === 'crit') g.c = computeCrit();
+      gameBarNow();
+    }
+  }
+  // The parts book: every part found, every inside visited.
+  function openBook() {
+    const body = $('#bookBody'), esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const visited = new Set(store.get('tal-visited', []));
+    let html = '';
+    TAL.devices.forEach((def) => {
+      const found = store.get('tal-found-' + def.id, []), total = store.get('tal-total-' + def.id, 0);
+      html += `<h3>${esc(def.name)}: ${found.length}${total >= found.length && total ? ' of ' + total : ''} parts found</h3>`;
+      html += found.length ? `<div class="chips">${found.map((n) => `<span class="chip">${esc(n)}</span>`).join('')}</div>` : '<div class="chips"><span class="chip no">Not opened yet</span></div>';
+    });
+    const worlds = Object.values(TAL.worlds), deep = worlds.filter((w) => visited.has(w.id) && /000,000/.test(w.zoom || ''));
+    html += `<h3>Inside views visited: ${worlds.filter((w) => visited.has(w.id)).length} of ${worlds.length}</h3>`;
+    html += `<div class="chips">${worlds.map((w) => `<span class="chip${visited.has(w.id) ? '' : ' no'}">${esc(w.name)}</span>`).join('')}</div>`;
+    html += `<h3>Badges</h3><div class="chips">`
+      + `<span class="chip${deep.length ? '' : ' no'}">Atom explorer: shrank a million times (${deep.length})</span>`
+      + `<span class="chip${visited.size >= 10 ? '' : ' no'}">Deep diver: 10 inside views</span>`
+      + `<span class="chip${visited.size >= worlds.length ? '' : ' no'}">Seen it all: every inside view</span>`
+      + `</div>`;
+    body.innerHTML = html;
+    $('#bookCard').hidden = false;
+  }
+  function markVisited(id) {
+    const v = store.get('tal-visited', []);
+    if (v.indexOf(id) < 0) { v.push(id); store.set('tal-visited', v); }
+  }
+  // Name tags: a touch bigger on small screens, and nudged apart so they don't sit on top of each other.
+  function layoutLabels() {
+    const inst = App.inst;
+    if (!inst || App.diving) return;
+    App.labT = (App.labT || 0) - 1;
+    if (App.labT > 0) return;
+    App.labT = 6;
+    const mult = innerWidth < 760 ? 1.4 : innerWidth < 1100 ? 1.25 : 1.12;
+    const f = innerHeight / (2 * Math.tan((camera.fov * Math.PI) / 360));
+    const labs = [], wp = new THREE.Vector3(), ws = new THREE.Vector3();
+    inst.root.traverseVisible((o) => { if (o.isSprite && o.userData.isLabel) labs.push(o); });
+    const rects = labs.map((s) => {
+      const b = s.userData.base;
+      s.scale.set(b.x * mult, b.y * mult, 1); s.center.set(0.5, 0.5);
+      s.getWorldPosition(wp); s.getWorldScale(ws);
+      const d = Math.max(0.1, wp.distanceTo(camera.position)), sc = toScreen(wp);
+      return { s, x: sc.x, y: sc.y, w: (ws.x * f) / d, h: (ws.y * f) / d };
+    }).sort((a, b) => b.y - a.y);
+    // bottom-up: keep tags above the toolbar, then lift any that sit on a tag below them
+    const placed = [], floor = innerHeight - 118;
+    rects.forEach((r) => {
+      let dy = Math.min(0, floor - (r.y + r.h / 2));
+      for (let k = 0; k < 6; k++) {
+        const hit = placed.find((q) => Math.abs(q.x - r.x) < (q.w + r.w) / 2 + 4 && Math.abs(q.y - (r.y + dy)) < (q.h + r.h) / 2 + 2);
+        if (!hit) break;
+        dy = hit.y - (hit.h + r.h) / 2 - 3 - r.y;
+      }
+      dy = Math.max(dy, -r.h * 4);
+      if (dy < 0) r.s.center.set(0.5, 0.5 + dy / r.h);
+      placed.push({ x: r.x, y: r.y + dy, w: r.w, h: r.h });
+    });
   }
   function autoQuality(dt) {
     const q = App.quality || (App.quality = { t: 0, n: 0, done: false });
@@ -2204,6 +2482,7 @@
     openDevice: (id, level) => openDevice(TAL.devices.find((d) => d.id === id), level), togglePower,
     voice: () => ({ clips: window.TAL_VOICE ? Object.keys(window.TAL_VOICE.clips).length : 0, talking: Voice.talking, src: Voice.el && Voice.el.src.slice(-20), unlocked: Voice.unlocked, ctx: Sound.ctx && Sound.ctx.state }), explodeAll, fixAll, startMission, nextChannel, setXray, hint,
     enterFocus: (id) => enterFocus(byId(id)), exitFocus,
+    game: (type) => { startGame(type); return App.game && App.game.type; }, guess: (b) => answerGuess(b), gameText: () => $('#gameText').textContent, endGame: () => endGame(true),
     pull: (id) => tryRemove(byId(id)), dial: () => { nextDial(); return $('#btnDial .lb').textContent; },
     dive: (id) => diveInto(byId(id)), back: () => goBack(), touch: (id) => { const p = byId(id); Voice.say(p.say, learnFor(p)); Caption.setPart(p); },
     deeper: () => { Caption.deeper(); return $('#capText').textContent; },
