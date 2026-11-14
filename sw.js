@@ -1,5 +1,5 @@
 /* Offline cache for the home-screen app. Bump VERSION when files change. */
-const VERSION = 'tal-v2';
+const VERSION = 'tal-v3';
 const FILES = [
   './', './index.html', './manifest.json',
   './js/engine.js', './js/devices/crt-tv.js', './js/devices/led-tv.js', './js/devices/flashlight.js',

@@ -31,7 +31,7 @@
     powerSound: 'flat',
     channels: true,
     view: { target: [0, 2.4, 0], radius: 3.5, explodedRadius: 7.8, explodedY: 3.2, yaw: -0.4, pitch: 0.14, shadow: [6.4, 2.6] },
-    intro: 'This is a flat LED TV. It has 150 pieces inside, and it is built in layers like a sandwich!',
+    intro: 'This is a flat LED TV. It has more than 150 pieces inside, and it is built in layers like a sandwich!',
     shellSay: "That's the metal back plate. All the layers and boards hang on it.",
 
     guide: [
@@ -273,7 +273,7 @@
       for (let i = 0; i < 4; i++) {
         const drv = k.group(k.at(k.box(0.55, 0.12, 0.008, k.mat(0xd99a3a, { roughness: 0.5 })), 0, 0, 0.004), k.at(k.box(0.26, 0.045, 0.01, 0x1a1a1d), 0, 0.01, 0.012));
         comp(panel, 'panel', {
-          id: 'drv' + i, name: 'Driver chip', obj: drv, at: [-2.1 + i * 1.4, (H - 0.14) / 2 - 0.08], z: 0.016, pull: [0, 0.5, 0.5], face: [0, 0, 1],
+          id: 'drv' + i, name: 'Driver chip', obj: drv, at: [-2.1 + i * 1.4, (H - 0.14) / 2 + 0.03], z: 0.016, pull: [0, 0.5, 0.5], face: [0, 0, 1],
           say: 'A driver chip! It sends signals to one part of the screen.',
           breaks: 'A stripe of the picture went black!', fact: 'Each driver chip controls hundreds of columns of tiny dots.',
           symptom: i === 1 ? 'A black stripe goes down the screen.' : undefined,
@@ -548,7 +548,7 @@
 
     // Screen layers are nearly invisible while on the panel, and show up as sheets once peeled off.
     tick(dt, t, inst) {
-      inst.refs.layers.forEach(({ id, mesh }) => { mesh.material.opacity = 0.08 + 0.5 * inst.byId[id].t; });
+      inst.refs.layers.forEach(({ id, mesh }) => { mesh.material.opacity = (id === 'tft' ? 0.02 : 0.07) + 0.5 * inst.byId[id].t; });
     },
   });
 
