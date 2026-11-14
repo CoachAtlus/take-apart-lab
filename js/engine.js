@@ -153,9 +153,17 @@
   ];
   const Sound = {
     ctx: null, muted: store.get('tal-muted', false), showOn: false, song: 0, step: 0, pending: null,
+    // Called on every tap. iPads start audio "suspended" and only let a tap wake it; they can also
+    // suspend it again (another app, the screen locking), so this keeps trying.
     unlock() {
+      try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) { /* older iPadOS */ }
       if (!this.ctx) this.init();
-      if (this.ctx && this.ctx.state !== 'running') { try { this.ctx.resume(); } catch (e) { /* ignore */ } }
+      if (!this.ctx) return;
+      if (this.ctx.state !== 'running') { try { const p = this.ctx.resume(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ } }
+      if (!this.primed) {
+        this.primed = true;
+        try { const s = this.ctx.createBufferSource(); s.buffer = this.ctx.createBuffer(1, 1, 22050); s.connect(this.ctx.destination); s.start(0); } catch (e) { this.primed = false; }
+      }
     },
     init() {
       const C = window.AudioContext || window.webkitAudioContext;
@@ -267,12 +275,44 @@
   };
 
   // ---------------------------------------------------------------- voice (Sparky) + caption
+  // Sparky speaks from recorded clips (voice/*.mp3, listed in voice/manifest.js) and falls back to the
+  // browser's speech voice for any line without a clip. Clips play through one <audio> element, which
+  // iPads allow (even in silent mode) once the first tap has unlocked it.
+  const hashText = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+  let silentUrl = null;
+  function silentWav() {
+    if (silentUrl) return silentUrl;
+    const n = 400, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true); v.setUint32(28, 16000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+    let bin = '';
+    new Uint8Array(buf).forEach((b) => { bin += String.fromCharCode(b); });
+    return (silentUrl = 'data:audio/wav;base64,' + btoa(bin));
+  }
+  const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  // Every fixed line the engine itself speaks (listed so recorded clips can be made later if wanted).
+  const SAFETY = 'And remember: only take apart real things with a grown-up!';
+  const ENGINE_LINES = [
+    SAFETY, "It's stuck! Take off the glowing part first.", 'Wait! Take the glowing part off first, then this can go back in.',
+    'You found it! That part was broken.', 'Tap it to put in a brand new one!', 'A brand new part!',
+    'Now put the other parts back and turn it on to test it.', 'Now turn it on to test it!',
+    "It's back in. Everything works again!", 'Click! It goes back in.', "You fixed it! It works again. You're a real fix-it engineer!",
+    'Nothing happened!', 'Turn it on first, then you can change the channel!', 'The channel knob is missing! Put it back to change the channel.',
+    'Kaboom! You took the whole thing apart!', 'Tap any piece to hear what it does.', 'All back together!', 'All back together! Press power to see if it works.',
+    'Uh oh, this one is broken!', 'Can you find the broken part?', 'Tap the burnt part to put in a new one!',
+    "Look for the smoke! You'll need to take some parts off to reach it.", "Look for the smoke! That's the broken part.",
+    "Let's look closer!", 'Pull its pieces off with your finger. Drag on the board to flip it around.', 'Pull its pieces off with your finger!',
+    "You found every kind of part! You're a real engineer!", "That's the case. It holds everything together.",
+    "It's on the back. Tap the turn around button!", 'I can talk again!',
+    "Hi! I'm Sparky. If you can hear me, we're ready to take things apart!",
+  ];
   const Caption = {
     timer: 0, moreText: '',
     init() {
       this.el = $('#caption'); this.txt = $('#capText'); this.more = $('#capMore');
       this.more.addEventListener('click', () => { if (this.moreText) Voice.say(this.moreText); });
-      $('#sparky').addEventListener('click', () => { Sound.unlock(); if (Voice.last) Voice.say(Voice.last, this.moreText); });
+      $('#sparky').addEventListener('click', () => { Sound.unlock(); Voice.repeat(); });
     },
     show(text, more) {
       this.txt.textContent = text;
@@ -284,54 +324,105 @@
     },
   };
   const Voice = {
-    on: store.get('tal-voice', true), voice: null, last: '', talking: false, u: null, queue: [],
-    ok() { return this.on && !!window.speechSynthesis && typeof window.SpeechSynthesisUtterance !== 'undefined'; },
-    pick(localOnly) {
+    on: store.get('tal-voice', true), talking: false, queue: [], cur: null, item: null, el: null, unlocked: false, ttsVoice: null, u: null, last: null, cancelledAt: 0,
+    clip(text) { const m = window.TAL_VOICE, h = hashText(text); return m && m.clips && m.clips[h] ? (m.base || 'voice/') + h + '.mp3' : null; },
+    ensureEl() {
+      if (this.el) return this.el;
+      const el = (this.el = new Audio());
+      el.preload = 'auto';
+      el.setAttribute('playsinline', '');
+      el.addEventListener('ended', () => { if (this.cur) this.next(); });
+      el.addEventListener('error', () => { if (this.cur) this.next(); });
+      return el;
+    },
+    // Call inside a tap. iPads only let speech and audio start from a tap; after that they keep working.
+    unlock() {
+      if (this.unlocked) return;
+      this.unlocked = true;
+      const ss = window.speechSynthesis;
+      if (ss && typeof window.SpeechSynthesisUtterance !== 'undefined' && !ss.speaking && !ss.pending) {
+        try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; ss.speak(u); } catch (e) { /* ignore */ }
+      }
+      if (window.TAL_VOICE) {
+        try {
+          const el = this.ensureEl();
+          el.src = silentWav();
+          const p = el.play();
+          if (p && p.catch) p.catch(() => {});
+        } catch (e) { /* ignore */ }
+      }
+    },
+    // caption text, "tell me more" text, wait for the current line?, what to actually say (a line or a list of lines)
+    say(text, more, queue, spoken) {
+      if (!text) return;
+      const item = { text, more, segs: [].concat(spoken || text).filter(Boolean) };
+      this.last = item;
+      if (queue && this.talking) { this.queue.push(item); return; }
+      this.stop();
+      this.play(item);
+    },
+    repeat() { if (this.last) { const l = this.last; this.stop(); this.play(l); } },
+    play(item) {
+      this.item = item;
+      Caption.show(item.text, item.more);
+      if (!this.on) return;
+      const urls = item.segs.map((s) => this.clip(s));
+      if (urls.length && urls.every(Boolean)) { this.cur = urls; this.setTalking(true); this.next(); }
+      else this.speakTTS(item.segs.join(' '));
+    },
+    next() {
+      if (this.cur && this.cur.length) {
+        const el = this.ensureEl();
+        el.src = this.cur.shift();
+        this.unlocked = true;
+        let p = null;
+        try { p = el.play(); } catch (e) { p = Promise.reject(e); }
+        if (p && p.catch) p.catch(() => { if (this.cur) { this.cur = null; this.speakTTS(this.item.segs.join(' ')); } });
+        return;
+      }
+      this.cur = null;
+      if (this.queue.length) { this.play(this.queue.shift()); return; }
+      this.setTalking(false);
+    },
+    pickTTS() {
       const ss = window.speechSynthesis;
       if (!ss) return;
-      const vs = ss.getVoices().filter((v) => !localOnly || v.localService);
+      const vs = ss.getVoices();
       const pref = ['Samantha', 'Google US English', 'Microsoft Aria', 'Microsoft Jenny', 'Microsoft Ava', 'Microsoft Zira', 'Karen', 'Moira', 'Daniel'];
-      for (const n of pref) { const v = vs.find((x) => x.name.indexOf(n) >= 0 && /^en/i.test(x.lang)); if (v) { this.voice = v; return; } }
-      this.voice = vs.find((v) => /^en[-_]US/i.test(v.lang)) || vs.find((v) => /^en/i.test(v.lang)) || null;
+      for (const n of pref) { const v = vs.find((x) => x.name.indexOf(n) >= 0 && /^en/i.test(x.lang)); if (v) { this.ttsVoice = v; return; } }
+      this.ttsVoice = vs.find((v) => /^en[-_]US/i.test(v.lang)) || vs.find((v) => /^en/i.test(v.lang)) || null;
+    },
+    speakTTS(text) {
+      const ss = window.speechSynthesis;
+      if (!ss || typeof window.SpeechSynthesisUtterance === 'undefined') { this.cur = null; this.next(); return; }
+      try {
+        const u = new SpeechSynthesisUtterance(text);
+        if (!this.ttsVoice) this.pickTTS();
+        if (this.ttsVoice) u.voice = this.ttsVoice;
+        u.lang = (this.ttsVoice && this.ttsVoice.lang) || 'en-US';
+        u.rate = 0.92; u.pitch = 1.15;
+        u.onend = u.onerror = () => { if (this.u === u) { this.u = null; this.next(); } };
+        this.u = u; // keep a reference: some browsers drop events for collected utterances
+        this.setTalking(true);
+        const go = () => { ss.speak(u); if (ss.paused) ss.resume(); };
+        // Desktop Chrome sometimes drops a line spoken right after cancel(), so it waits a beat there.
+        // iPads must speak immediately, inside the tap, or they may stay silent.
+        if (!IS_IOS && performance.now() - this.cancelledAt < 120) setTimeout(go, 90); else go();
+      } catch (e) { this.setTalking(false); }
+    },
+    stop() {
+      this.queue = []; this.cur = null; this.u = null;
+      if (this.el) { try { this.el.pause(); } catch (e) { /* ignore */ } }
+      try { if (window.speechSynthesis && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) { window.speechSynthesis.cancel(); this.cancelledAt = performance.now(); } } catch (e) { /* ignore */ }
+      this.setTalking(false);
     },
     setTalking(on) {
+      if (this.talking === on) return;
       this.talking = on;
       $('#caption').classList.toggle('talking', on);
       Sound.duck(on);
-      if (!on) Caption.show(Caption.txt.textContent, Caption.moreText);
     },
-    // queue = wait for the current line to finish instead of cutting it off
-    say(text, more, queue) {
-      if (!text) return;
-      this.last = text;
-      const ss = window.speechSynthesis;
-      if (!this.ok()) { Caption.show(text, more); return; }
-      if (queue && (ss.speaking || ss.pending)) { this.speak(text, more, false); return; }
-      Caption.show(text, more);
-      if (ss.speaking || ss.pending) { ss.cancel(); setTimeout(() => this.speak(text, more, true), 60); }
-      else this.speak(text, more, true);
-    },
-    speak(text, more, shown, retried) {
-      const ss = window.speechSynthesis;
-      try {
-        const u = new SpeechSynthesisUtterance(text);
-        if (!this.voice) this.pick();
-        if (this.voice) u.voice = this.voice;
-        u.lang = (this.voice && this.voice.lang) || 'en-US';
-        u.rate = 0.92; u.pitch = 1.15;
-        u.onstart = () => { this.setTalking(true); if (!shown) Caption.show(text, more); };
-        u.onend = () => { if (!ss.speaking && !ss.pending) this.setTalking(false); };
-        u.onerror = (e) => {
-          if (!ss.speaking && !ss.pending) this.setTalking(false);
-          if (!retried && e && e.error && !/interrupted|canceled/.test(e.error)) { this.pick(true); this.speak(text, more, true, true); }
-        };
-        this.u = u; // keep a reference: some browsers drop events for collected utterances
-        ss.speak(u);
-        if (ss.paused) ss.resume();
-      } catch (e) { Caption.show(text, more); }
-    },
-    stop() { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) { /* ignore */ } this.setTalking(false); },
-    busy() { const ss = window.speechSynthesis; return this.ok() && !!ss && (ss.speaking || ss.pending); },
+    busy() { return this.talking; },
   };
 
   // ---------------------------------------------------------------- screen shows
@@ -473,6 +564,7 @@
     c.globalCompositeOperation = 'source-over';
   }
   const OFF_CRT = '#27302b';
+  let blurC = null;
   function drawContent(c, W, H, scr, t, channel, crt) {
     const m = scr.mode;
     if (m === 'off') { c.fillStyle = crt ? OFF_CRT : '#0b0d12'; c.fillRect(0, 0, W, H); return; }
@@ -485,11 +577,36 @@
       c.fillStyle = g; c.fillRect(0, 0, W, H);
       return;
     }
+    else if (m === 'line' || m === 'vline') {
+      c.fillStyle = '#101412'; c.fillRect(0, 0, W, H);
+      const across = m === 'line';
+      const g = across ? c.createLinearGradient(0, H / 2 - 9, 0, H / 2 + 9) : c.createLinearGradient(W / 2 - 9, 0, W / 2 + 9, 0);
+      g.addColorStop(0, 'rgba(200,255,230,0)'); g.addColorStop(0.5, '#ffffff'); g.addColorStop(1, 'rgba(200,255,230,0)');
+      c.fillStyle = g;
+      if (across) c.fillRect(W * 0.04, H / 2 - 9, W * 0.92, 18); else c.fillRect(W / 2 - 9, H * 0.04, 18, H * 0.92);
+      return;
+    }
     else if (m === 'snow') drawSnow(c, W, H);
     else if (m === 'nosignal') drawNoSignal(c, W, H, t);
     else if (m === 'white') { c.fillStyle = '#f2f6ff'; c.fillRect(0, 0, W, H); }
     else (CHANNELS[channel] || CHANNELS[0]).draw(c, W, H, t);
     if (scr.glitch) glitch(c, W, H, t);
+    if (scr.blur) {
+      if (!blurC) blurC = document.createElement('canvas');
+      blurC.width = Math.max(8, Math.round(W / 8)); blurC.height = Math.max(6, Math.round(H / 8));
+      blurC.getContext('2d').drawImage(c.canvas, 0, 0, blurC.width, blurC.height);
+      c.imageSmoothingEnabled = true; c.drawImage(blurC, 0, 0, W, H);
+    }
+    if (scr.tint) { c.globalCompositeOperation = 'multiply'; c.fillStyle = scr.tint; c.fillRect(0, 0, W, H); c.globalCompositeOperation = 'source-over'; }
+    if (scr.blotch) {
+      c.globalCompositeOperation = 'color';
+      [[0.2, 0.25, '#ff00aa'], [0.8, 0.3, '#00ff66'], [0.3, 0.8, '#ffaa00'], [0.75, 0.78, '#3355ff']].forEach(([x, y, col], i) => {
+        const r = W * 0.32, cx = W * x + Math.sin(t * 0.4 + i) * 10, cy = H * y, g = c.createRadialGradient(cx, cy, 0, cx, cy, r);
+        g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)');
+        c.globalAlpha = 0.6; c.fillStyle = g; c.fillRect(0, 0, W, H);
+      });
+      c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+    }
     if (scr.gray) { c.globalCompositeOperation = 'saturation'; c.fillStyle = '#808080'; c.fillRect(0, 0, W, H); c.globalCompositeOperation = 'source-over'; }
     if (scr.invert) { c.globalCompositeOperation = 'difference'; c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H); c.globalCompositeOperation = 'source-over'; }
     if (scr.deadCols) {
@@ -621,9 +738,17 @@
   // ---------------------------------------------------------------- device instances
   // Parts can nest: a part with `parent` lives inside its parent's object and can come off
   // once the parent is reachable (or already pulled out).
-  function instantiate(def, kit) {
+  // Levels: a part with `level` above the chosen one isn't separate. If it names `fuse`, it rides along
+  // inside that part; if it's nested in a parent, it stays part of the parent; otherwise it's scenery.
+  function instantiate(def, kit, level) {
+    const L = level || 3;
     const built = def.build(kit);
-    const inst = { def, root: built.root, parts: [], byId: {}, screen: built.screen || null, refs: built.refs || {}, shell: [], anim: null, osd: null };
+    built.root.updateMatrixWorld(true);
+    const specById = {};
+    built.parts.forEach((p) => { specById[p.id] = p; });
+    built.parts.forEach((p) => { if ((p.level || 1) > L && p.fuse && specById[p.fuse]) specById[p.fuse].obj.attach(p.obj); });
+    built.parts = built.parts.filter((p) => (p.level || 1) <= L);
+    const inst = { def, level: L, root: built.root, parts: [], byId: {}, screen: built.screen || null, refs: built.refs || {}, shell: [], anim: null, osd: null };
     (built.shell || []).forEach((o) => o.traverse((m) => {
       if (!m.isMesh) return;
       m.material = m.material.clone();
@@ -683,6 +808,7 @@
   const sig = (o) => JSON.stringify(o);
 
   // ---------------------------------------------------------------- app state
+  const LEVELS = [{ n: 1, name: 'Beginner' }, { n: 2, name: 'Medium' }, { n: 3, name: 'Advanced' }];
   const App = {
     inst: null, on: false, out: null, channel: 0, xray: false, focus: null,
     yaw: 0, yawT: 0, pitch: 0.2, pitchT: 0.2, zoom: 1, zoomT: 1, R: 4, lift: 0,
@@ -750,7 +876,7 @@
     store.set('tal-found-' + id, [...set]);
     const total = new Set(App.inst.parts.map((q) => q.name)).size;
     if (set.size === total) {
-      Voice.say(`You found every kind of part in the ${App.inst.def.short}! You're a real engineer!`, null, true);
+      Voice.say(`You found every kind of part in the ${App.inst.def.short}! You're a real engineer!`, null, true, "You found every kind of part! You're a real engineer!");
       setTimeout(() => { if (App.inst) { confettiBurst(); Sound.fanfare(); } }, 1200);
     }
   }
@@ -769,7 +895,8 @@
     blockers.forEach((b) => { b.pulse = 1.8; });
     Sound.bonk();
     const names = nameList(blockers);
-    Voice.say(putting ? `Wait! Take off the ${names} first, then it can go back in.` : `It's stuck! Take off the ${names} first.`);
+    Voice.say(putting ? `Wait! Take off the ${names} first, then it can go back in.` : `It's stuck! Take off the ${names} first.`, null, false,
+      putting ? 'Wait! Take the glowing part off first, then this can go back in.' : "It's stuck! Take off the glowing part first.");
   }
   function tryRemove(p, o) {
     const blockers = blockersOf(p);
@@ -789,7 +916,7 @@
     if (M && M.broken === p.id && !M.found) {
       M.found = true; p.smoke = false;
       scorch(p, true);
-      Voice.say(`You found it! The ${lower(p.name)} was broken. Tap it to put in a brand new one!`);
+      Voice.say(`You found it! The ${lower(p.name)} was broken. Tap it to put in a brand new one!`, null, false, ['You found it! That part was broken.', 'Tap it to put in a brand new one!']);
       Sound.fanfare();
       updateMissionUI();
       return;
@@ -798,7 +925,7 @@
     if (zapped) { sparkAt(p); Sound.zap(); }
     if (!o.quiet) {
       const showBreak = p.breaks && before.alive && (changed || p.breaksAlways);
-      Voice.say(showBreak ? `${p.say} ${p.breaks}` : p.say, p.fact);
+      Voice.say(showBreak ? `${p.say} ${p.breaks}` : p.say, p.fact, false, showBreak ? [p.say, p.breaks] : p.say);
     }
     if (!o.noGuide) Guide.advance();
   }
@@ -827,7 +954,8 @@
       refresh();
       if (!checkMission()) {
         const others = App.inst.parts.some(isOut);
-        Voice.say(`A brand new ${lower(p.name)}!` + (others ? ' Now put the other parts back and turn it on to test it.' : App.on ? '' : ' Now turn it on to test it!'));
+        const rest = others ? 'Now put the other parts back and turn it on to test it.' : App.on ? '' : 'Now turn it on to test it!';
+        Voice.say(`A brand new ${lower(p.name)}! ${rest}`, null, false, ['A brand new part!', rest]);
       }
       updateMissionUI();
       return true;
@@ -836,8 +964,8 @@
     if (checkMission()) return true;
     if (!o.quiet) {
       const ideal = sig(evaluate(App.inst, true, { ideal: true }));
-      if (App.on && sig(after) === ideal && sig(before) !== ideal) { Voice.say(`${p.name} is back in. Everything works again!`); Sound.fanfare(); }
-      else Voice.say(`${p.name} goes back in. Click!`);
+      if (App.on && sig(after) === ideal && sig(before) !== ideal) { Voice.say(`${p.name} is back in. Everything works again!`, null, false, "It's back in. Everything works again!"); Sound.fanfare(); }
+      else Voice.say(`${p.name} goes back in. Click!`, null, false, 'Click! It goes back in.');
     }
     if (!o.noGuide) Guide.advance();
     return true;
@@ -852,7 +980,7 @@
     store.set('tal-wins', App.wins);
     Sound.fanfare();
     confettiBurst();
-    Voice.say(`You fixed it! The ${def.short} works again. You're a real fix-it engineer!`);
+    Voice.say(`You fixed it! The ${def.short} works again. You're a real fix-it engineer!`, null, false, "You fixed it! It works again. You're a real fix-it engineer!");
     updateMissionUI(); updateUI();
     return true;
   }
@@ -863,7 +991,7 @@
     const out = refresh();
     const def = App.inst.def, inMission = App.mission && !App.mission.fixedPart;
     if (App.on) {
-      if (!out.alive) { Sound.click(); Voice.say(`Nothing happened! ${inMission ? '' : out.reason || ''}`); }
+      if (!out.alive) { Sound.click(); const why = inMission ? '' : out.reason || ''; Voice.say(`Nothing happened! ${why}`, null, false, ['Nothing happened!', why]); }
       else { powerSound(def); if (out.reason && !inMission) Voice.say(out.reason); }
       checkMission();
     } else Sound.off();
@@ -872,6 +1000,8 @@
   function nextChannel() {
     const inst = App.inst;
     if (!inst || !inst.def.channels) return;
+    const knob = inst.def.channelPart && inst.byId[inst.def.channelPart];
+    if (knob && knob.target === 1) { Sound.bonk(); knob.pulse = 1.5; Voice.say('The channel knob is missing! Put it back to change the channel.'); return; }
     App.channel = (App.channel + 1) % CHANNELS.length;
     inst.osd = { text: `CH ${App.channel + 1}`, until: App.time + 1.8 };
     Sound.click();
@@ -892,7 +1022,7 @@
     }
     const gap = clamp(5500 / Math.max(1, order.length), 28, 170);
     order.forEach((p, i) => setTimeout(() => { if (token === App.seq && p.target === 0) removePart(p, { quiet: true, noGuide: true }); }, i * gap));
-    setTimeout(() => { if (token === App.seq) { Voice.say(`Kaboom! You took the whole ${inst.def.short} apart! That's ${inst.parts.length} pieces! Tap any piece to hear what it does.`); Guide.advance(false); updateUI(); } }, order.length * gap + 400);
+    setTimeout(() => { if (token === App.seq) { Voice.say(`Kaboom! You took the whole ${inst.def.short} apart! That's ${inst.parts.length} pieces! Tap any piece to hear what it does.`, null, false, ['Kaboom! You took the whole thing apart!', 'Tap any piece to hear what it does.']); Guide.advance(false); updateUI(); } }, order.length * gap + 400);
   }
   function fixAll(silent) {
     const inst = App.inst, token = ++App.seq;
@@ -926,7 +1056,7 @@
     App.lastAlive = false;
     refresh();
     powerSound(inst.def);
-    Voice.say(`Uh oh, this ${inst.def.short} is broken! ${pick.symptom} Can you find the broken part?`);
+    Voice.say(`Uh oh, this ${inst.def.short} is broken! ${pick.symptom} Can you find the broken part?`, null, false, ['Uh oh, this one is broken!', pick.symptom, 'Can you find the broken part?']);
     updateMissionUI();
   }
   function stopMission() {
@@ -943,10 +1073,11 @@
     const M = App.mission;
     if (!M) return;
     const p = byId(M.broken);
-    if (M.found) { p.pulse = 2.5; Voice.say(`Tap the burnt ${lower(p.name)} to put in a new one!`); return; }
+    if (M.found) { p.pulse = 2.5; Voice.say(`Tap the burnt ${lower(p.name)} to put in a new one!`, null, false, 'Tap the burnt part to put in a new one!'); return; }
     p.smoke = true; p.pulse = 3;
     const blockers = blockersOf(p);
-    Voice.say(blockers.length ? `Look for the smoke! You'll need to take off the ${nameList(blockers.slice(0, 3))} to reach it.` : "Look for the smoke! That's the broken part.");
+    Voice.say(blockers.length ? `Look for the smoke! You'll need to take off the ${nameList(blockers.slice(0, 3))} to reach it.` : "Look for the smoke! That's the broken part.", null, false,
+      blockers.length ? "Look for the smoke! You'll need to take some parts off to reach it." : "Look for the smoke! That's the broken part.");
   }
   function setXray(on) {
     App.xray = on;
@@ -971,7 +1102,7 @@
     $('#focusBar').hidden = false;
     $('#focusName').textContent = p.name;
     Sound.whoosh();
-    Voice.say(`Let's look closer at the ${lower(p.name)}! Pull its pieces off with your finger. Drag on the board to flip it around.`);
+    Voice.say(`Let's look closer at the ${lower(p.name)}! Pull its pieces off with your finger. Drag on the board to flip it around.`, null, false, ["Let's look closer!", 'Pull its pieces off with your finger. Drag on the board to flip it around.']);
     updateUI();
     Guide.advance();
   }
@@ -986,7 +1117,16 @@
   // ---------------------------------------------------------------- the guide (Sparky tells you what to do next)
   const Guide = {
     on: store.get('tal-guide', true), i: 0, steps: null, target: null, needTurn: false, lastVis: 0, announced: -1,
-    reset(def) { this.steps = def.guide || null; this.i = 0; this.target = null; this.announced = -1; this.needTurn = false; },
+    // Keep only the steps that fit this level: drop pieces that aren't separate here, and steps left with nothing to do.
+    reset(inst) {
+      const act = (id) => !!inst.byId[id];
+      const steps = (inst.def.guide || [])
+        .filter((s) => !s.levels || s.levels.indexOf(inst.level) >= 0)
+        .map((s) => (s.ids ? Object.assign({}, s, { ids: s.ids.filter(act) }) : s))
+        .filter((s) => (!s.ids || s.ids.length) && (s.do !== 'focus' || (act(s.id) && inst.byId[s.id].kids.length)));
+      this.steps = steps.length ? steps : null;
+      this.i = 0; this.target = null; this.announced = -1; this.needTurn = false;
+    },
     done(s) {
       const inst = App.inst;
       if (!inst) return false;
@@ -1125,7 +1265,7 @@
       return;
     }
     const p = hit.part;
-    if (App.focus && p === App.focus) { Voice.say(`${p.say} Pull its pieces off with your finger!`, p.fact); return; }
+    if (App.focus && p === App.focus) { Voice.say(`${p.say} Pull its pieces off with your finger!`, p.fact, false, [p.say, 'Pull its pieces off with your finger!']); return; }
     if (p.target === 0) tryRemove(p);
     else if (p.kids.length && !App.focus) enterFocus(p);
     else putBack(p);
@@ -1279,12 +1419,14 @@
       ? 'New part is in! Put everything back and turn it on.'
       : M.found ? 'You found it! Tap the burnt part to put in a new one.' : `${p.symptom} Find the broken part.`;
   }
-  function openDevice(def) {
+  function openDevice(def, level) {
+    level = level || store.get('tal-level-' + def.id, 1);
+    store.set('tal-level-' + def.id, level);
     App.seq++;
     Voice.stop();
     if (App.inst) { turntable.remove(App.inst.root); disposeTree(App.inst.root); }
     App.focus = null; $('#focusBar').hidden = true;
-    const inst = instantiate(def, kit);
+    const inst = instantiate(def, kit, level);
     const sh = def.view.shadow || [5, 4];
     const blob = new THREE.Mesh(new THREE.PlaneGeometry(sh[0] * 1.6, sh[1] * 1.6), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, opacity: 0.6 }));
     blob.rotation.x = -Math.PI / 2; blob.position.y = 0.01; blob.userData.noPick = true;
@@ -1296,16 +1438,18 @@
     App.pitch = App.pitchT = v.pitch == null ? 0.2 : v.pitch;
     App.zoom = App.zoomT = 1;
     App.R = v.radius; tgt.set(0, v.target[1], 0);
-    Guide.reset(def);
+    Guide.reset(inst);
     refresh();
     $('#home').hidden = true; $('#hud-top').hidden = false; $('#tools').hidden = false;
     $('#devName').textContent = def.name;
+    $('#devLevel').textContent = LEVELS[level - 1].name;
+    $('#devLevel').dataset.level = level;
     $('#btnChannel').hidden = !def.channels;
     $('#btnMission').hidden = !inst.parts.some((p) => p.symptom);
     updateMissionUI();
     const first = !store.get('tal-safety', false);
     store.set('tal-safety', true);
-    Voice.say(def.intro + (first ? ' And remember: only take apart real things with a grown-up!' : ''));
+    Voice.say(def.intro + (first ? ' ' + SAFETY : ''), null, false, first ? [def.intro, SAFETY] : def.intro);
     Guide.advance();
     try { history.replaceState(null, '', '#' + def.id); } catch (e) { /* ignore */ }
   }
@@ -1334,7 +1478,7 @@
   function makeThumb(def, r) {
     const sc = new THREE.Scene();
     addLights(sc);
-    const inst = instantiate(def, kit);
+    const inst = instantiate(def, kit, 1);
     sc.add(inst.root);
     inst.root.rotation.y = def.view.yaw || 0;
     const out = evaluate(inst, true, { ideal: true });
@@ -1358,16 +1502,31 @@
       tr.setPixelRatio(1); tr.setSize(480, 360, false); tr.outputEncoding = THREE.sRGBEncoding;
     } catch (e) { tr = null; }
     TAL.devices.forEach((def) => {
-      const b = document.createElement('button');
-      b.className = 'card';
-      b.type = 'button';
+      const card = document.createElement('div');
+      card.className = 'card';
+      const pic = document.createElement('button'); pic.type = 'button'; pic.className = 'card-pic'; pic.setAttribute('aria-label', 'Open the ' + def.name);
       const img = document.createElement('img'); img.alt = '';
+      pic.append(img);
+      pic.addEventListener('click', () => openDevice(def));
       const n = document.createElement('span'); n.className = 'card-name'; n.textContent = def.name;
       const s = document.createElement('span'); s.className = 'card-sub'; s.textContent = def.subtitle || '';
-      const go = document.createElement('span'); go.className = 'card-go'; go.textContent = 'Open it up';
-      b.append(img, n, s, go);
-      b.addEventListener('click', () => { Sound.unlock(); Voice.pick(); openDevice(def); });
-      grid.appendChild(b);
+      // piece counts per level, read straight from the device's part list
+      const built = def.build(kit);
+      const counts = LEVELS.map((l) => built.parts.filter((p) => (p.level || 1) <= l.n).length);
+      disposeTree(built.root);
+      const row = document.createElement('div'); row.className = 'levels';
+      LEVELS.forEach((l, i) => {
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'lvl'; btn.dataset.level = l.n;
+        const stars = document.createElement('span'); stars.className = 'stars'; stars.textContent = '★'.repeat(l.n);
+        const nm = document.createElement('b'); nm.textContent = l.name;
+        const ct = document.createElement('span'); ct.className = 'count'; ct.textContent = counts[i] + ' pieces';
+        btn.append(stars, nm, ct);
+        btn.addEventListener('click', () => openDevice(def, l.n));
+        row.append(btn);
+      });
+      card.append(pic, n, s, row);
+      grid.appendChild(card);
       if (tr) { try { img.src = makeThumb(def, tr); } catch (e) { /* thumbnail optional */ } }
     });
     if (tr) { tr.dispose(); if (tr.forceContextLoss) tr.forceContextLoss(); }
@@ -1397,7 +1556,15 @@
     return new THREE.CanvasTexture(cv);
   }
   function wireButtons() {
+    // Wake up sound on every touch, before any button handles it (iPad needs this).
+    const wake = () => { Sound.unlock(); Voice.unlock(); };
+    ['touchend', 'pointerup', 'click', 'keydown'].forEach((t) => document.addEventListener(t, wake, true));
     const on = (id, fn) => $(id).addEventListener('click', () => { Sound.unlock(); App.lastAct = App.time; fn(); });
+    on('#btnSoundCheck', () => {
+      Sound.fanfare();
+      Voice.say("Hi! I'm Sparky. If you can hear me, we're ready to take things apart!");
+      $('#soundHelp').hidden = false;
+    });
     on('#btnHome', goHome);
     on('#btnPower', togglePower);
     on('#btnChannel', nextChannel);
@@ -1521,6 +1688,7 @@
   }
   function boot() {
     const canvas = $('#gl');
+    if (!canvas) return; // e.g. tools/lines.html loads the engine only to list Sparky's lines
     try {
       renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     } catch (e) {
@@ -1551,7 +1719,7 @@
     setupInput(canvas);
     Caption.init();
     wireButtons();
-    if (window.speechSynthesis) { Voice.pick(); window.speechSynthesis.onvoiceschanged = () => Voice.pick(); }
+    if (window.speechSynthesis) { Voice.pickTTS(); window.speechSynthesis.onvoiceschanged = () => Voice.pickTTS(); }
     buildHome();
     camera.position.set(0, 6, 18); camera.lookAt(0, 2, 0);
     requestAnimationFrame(loop);
@@ -1564,8 +1732,25 @@
     } catch (e) { /* ignore */ }
   }
   // Test hooks. tapPart() taps where a part shows on screen, so it goes through real picking.
+  // Every line Sparky can say, with its clip name. tools/lines.html prints this for tools/make_voice.py.
+  TAL.voiceLines = function () {
+    const set = new Set(ENGINE_LINES), add = (s) => { if (s) set.add(s); };
+    const k = makeKit();
+    TAL.devices.forEach((def) => {
+      add(def.intro); add(def.shellSay);
+      (def.guide || []).forEach((s) => { add(s.say); add(s.nudge); });
+      const built = def.build(k);
+      built.parts.forEach((p) => { add(p.say); add(p.breaks); add(p.fact); add(p.symptom); });
+      const probe = (missing) => { try { const r = def.evaluate((id) => !missing.has(id), true, { refs: built.refs }); add(r && r.reason); } catch (e) { /* ignore */ } };
+      probe(new Set());
+      built.parts.forEach((p) => probe(new Set([p.id])));
+      disposeTree(built.root);
+    });
+    return [...set].map((t) => ({ h: hashText(t), t }));
+  };
   TAL.debug = {
-    openDevice: (id) => openDevice(TAL.devices.find((d) => d.id === id)), togglePower, explodeAll, fixAll, startMission, nextChannel, setXray, hint,
+    openDevice: (id, level) => openDevice(TAL.devices.find((d) => d.id === id), level), togglePower,
+    voice: () => ({ clips: window.TAL_VOICE ? Object.keys(window.TAL_VOICE.clips).length : 0, talking: Voice.talking, src: Voice.el && Voice.el.src.slice(-20), unlocked: Voice.unlocked, ctx: Sound.ctx && Sound.ctx.state }), explodeAll, fixAll, startMission, nextChannel, setXray, hint,
     enterFocus: (id) => enterFocus(byId(id)), exitFocus,
     pull: (id) => tryRemove(byId(id)),
     tapPart(id) {

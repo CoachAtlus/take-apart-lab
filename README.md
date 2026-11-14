@@ -2,13 +2,18 @@
 
 A 3D take-it-apart game for a 5-year-old. Pick a device, spin it around, tap parts to pull them out, and watch what breaks. A friendly voice explains each part. A "Fix-it mission" breaks one part; the kid reads the symptom and finds it.
 
-Devices so far: Old Tube TV (CRT, 14 pieces), Flat LED TV (156 pieces), Flashlight (8 pieces).
+Devices so far, with pieces at Beginner / Medium / Advanced:
+
+- Old Tube TV: 9 / 20 / 44
+- Flat LED TV: 21 / 109 / 266
+- Flashlight: 6 / 8 / 17
 
 Sparky, a talking robot, walks the kid through each device step by step: a glowing ring shows what to touch, an arrow shows which way to drag, and he nudges if nothing happens for a while.
 
 ## Play
 
 - iPad: open the GitHub Pages link in Safari, tap Share, then **Add to Home Screen**. It opens full screen like an app and works offline after the first visit.
+- Sound: Sparky uses the device's built-in reader. Tap **Sound check** on the start screen. No sound on an iPad usually means Silent mode (the bell in Control Center) or the volume.
 - PC: double-click `Play.bat` (opens `index.html` in your browser). No install, no server.
 - Drag a part with a finger to pull it out (any direction works). Tap a pulled-out board to look closer and pick its pieces off.
 - Needs internet the first time for the font; three.js falls back to `vendor/three.min.js` offline.
@@ -56,6 +61,8 @@ TAL.registerDevice({
         face: [0, 0, -1],           // which way the part faces, so "look closer" turns it toward you
         focusRadius: 1.4,           // how close "look closer" zooms
         breaksAlways: true,         // say the `breaks` line even if nothing visible changes
+        level: 2,                   // 1 Beginner (default), 2 Medium, 3 Advanced: the first level where this is its own piece
+        fuse: 'cover',              // below its level, ride along inside this part (nested pieces stay in their parent anyway)
         say: 'What it is, for a 5-year-old.',
         breaks: 'What stops working if you pull it while it is on.',
         fact: 'The "Tell me more" line.',
@@ -75,6 +82,7 @@ TAL.registerDevice({
   tick(dt, t, inst, out) { /* optional: per-frame animation */ },
 
   // Sparky's walkthrough. Steps: power, remove {ids}, removeAny {ids}, turn {side:'back'}, focus {id}, end.
+  // A step can say `levels: [1]`; ids that aren't pieces at the current level are dropped, and empty steps skipped.
   guide: [
     { do: 'power', say: 'Press the green power button.', nudge: 'Said again if nothing happens for a while.' },
     { do: 'remove', ids: ['cover'], say: 'Pull off the back cover.' },
@@ -83,7 +91,7 @@ TAL.registerDevice({
 });
 ```
 
-Screen modes: `off`, `black`, `picture`, `snow`, `dot`, `nosignal`, `white`, plus `glitch`, `gray`, `invert`, `hotspots`, `deadCols` (column indexes of 4), `darkRows` (row indexes of 5, from the bottom) and `dim` (0 to 1). Sound: `show`, `hiss`, `left`, `right`.
+Screen modes: `off`, `black`, `picture`, `snow`, `dot`, `line`, `vline`, `nosignal`, `white`, plus `glitch`, `gray`, `invert`, `tint` (a color like `#00ffff`), `blotch`, `blur`, `hotspots`, `deadCols` (column indexes of 4), `darkRows` (row indexes of 5, from the bottom) and `dim` (0 to 1). Sound: `show`, `hiss`, `left`, `right`.
 
 The LED TV (`js/devices/led-tv.js`) is the worked example of a big device: board builders, nested pieces, role-based breakage.
 

@@ -25,13 +25,13 @@
     id: 'led-tv',
     name: 'Flat LED TV',
     short: 'TV',
-    subtitle: 'The thin kind we have today. 150 pieces!',
+    subtitle: 'The thin kind we have today',
     screenStyle: 'flat',
     screenPart: 'panel',
     powerSound: 'flat',
     channels: true,
     view: { target: [0, 2.4, 0], radius: 3.5, explodedRadius: 7.8, explodedY: 3.2, yaw: -0.4, pitch: 0.14, shadow: [6.4, 2.6] },
-    intro: 'This is a flat LED TV. It has more than 150 pieces inside, and it is built in layers like a sandwich!',
+    intro: 'This is a flat LED TV. It is built in layers, like a sandwich!',
     shellSay: "That's the metal back plate. All the layers and boards hang on it.",
 
     guide: [
@@ -41,7 +41,10 @@
       { do: 'remove', ids: ['panel'], say: 'Now pull off the whole screen panel. Pull it toward you!', nudge: 'Drag the screen panel off.' },
       { do: 'remove', ids: ['film1', 'film2', 'film3'], say: 'So much light! Peel off the three thin sheets.', nudge: 'Pull off the thin see-through sheet.' },
       { do: 'remove', ids: ['diffuser'], say: 'Now pull off the milky white plate.', nudge: 'Drag the white plate off.' },
+      { do: 'removeAny', ids: ['strip0', 'strip1', 'strip2', 'strip3', 'strip4'], levels: [1], say: 'Look at the lights behind! Pull out one strip of lights.', nudge: 'Pull out a strip of lights.' },
       { do: 'removeAny', ids: LEDS, say: 'Look at all the little lights! Pull out just one light and watch its row.', nudge: 'Pull out one little light.' },
+      { do: 'removeAny', ids: LEDS.map((id) => id + '_lens'), levels: [3], say: 'Each light has a clear cap. Pull the cap off a light that is still glowing.', nudge: 'Pull the clear cap off a glowing light.' },
+      { do: 'removeAny', ids: LEDS.map((id) => id + '_ph'), levels: [3], say: 'Now peel off the yellow coating. What color is the light now?', nudge: 'Peel off the yellow coating.' },
       { do: 'turn', side: 'back', say: "Now let's see the back. Tap the turn around button.", nudge: 'Tap the turn around button.' },
       { do: 'remove', ids: COVER_SCREWS, say: 'The back cover has eight screws. Twist them out with your finger!', nudge: 'Pull out the glowing screw.' },
       { do: 'remove', ids: ['cover'], say: 'Now pull off the back cover.', nudge: 'Drag the back cover away.' },
@@ -194,9 +197,13 @@
           dome.rotation.x = Math.PI / 2; dome.position.z = 0.03;
           dome.material.transparent = true; dome.material.opacity = 0.9;
           dome.userData.glowI = 1.1;
-          const halo = new T.Mesh(new T.PlaneGeometry(0.42, 0.42), new T.MeshBasicMaterial({ map: haloTex, transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
+          const halo = new T.Mesh(new T.PlaneGeometry(0.3, 0.3), new T.MeshBasicMaterial({ map: haloTex, transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
           halo.position.z = 0.07; halo.userData.noPick = true; halo.visible = false;
-          const led = k.group(k.at(k.box(0.14, 0.14, 0.03, M.white), 0, 0, 0.015), k.at(chipM, 0, 0, 0.035), dome, halo);
+          const led = k.group(k.at(k.box(0.14, 0.14, 0.03, M.white), 0, 0, 0.015), k.at(chipM, 0, 0, 0.035), halo);
+          const lensG = k.group(dome);
+          const phM = k.rot(k.cyl(0.032, 0.032, 0.006, k.mat(0xf2d33a, { roughness: 0.6 }), 16), Math.PI / 2, 0, 0);
+          const phG = k.group(k.at(phM, 0, 0, 0.044));
+          led.add(phG, lensG);
           const id = ledId(r, c);
           comp(strip, 'strip' + r, {
             id, name: 'LED light', obj: led, at: [-2.25 + c * 0.5, 0], z: 0.008, pull: [(c - 4.5) * 0.03, 0.22, 0.5],
@@ -205,7 +212,14 @@
             fact: LED_FACTS[(r * COLS + c) % LED_FACTS.length],
             symptom: c === 4 ? `One stripe of the screen is dark.` : undefined,
           });
-          row.push({ id, meshes: [chipM, dome], halo });
+          comp(led, id, { id: id + '_lens', name: 'LED cap', obj: lensG, at: [0, 0], z: 0, pull: [0, 0.12, 0.35], face: [0, 0, 1], level: 3,
+            say: 'The clear cap is a tiny lens. It spreads the light out wide.',
+            fact: 'Without the cap, the light shoots straight out in a narrow beam.' });
+          comp(led, id, { id: id + '_ph', name: 'Yellow coating', obj: phG, at: [0, 0], z: 0, pull: [0, -0.12, 0.3], blockedBy: [id + '_lens'], face: [0, 0, 1], level: 3,
+            say: 'Under the cap is a yellow coating. Watch what color the light is without it!',
+            breaks: 'Now it glows blue! The tiny chip really makes blue light. The yellow coating mixes in to make it look white.', breaksAlways: true,
+            fact: 'Blue plus yellow light looks white to our eyes. TV makers use that trick in almost every white LED.' });
+          row.push({ id, chipM, dome, halo, lens: id + '_lens', ph: id + '_ph' });
         }
         refs.ledRows.push(row);
       }
@@ -363,6 +377,17 @@
         say: 'A diode only lets electricity go one way, like a door that only opens one way.' });
       P({ id: 'outConn', name: 'Power wire socket', obj: conn(0.12, 0.3, 0.12, 0xf2efe6, 3), at: [0.82, 0.15], blockedBy: ['harness'],
         say: 'The power wires to the main board plug in here.', breaks: 'The main board lost its power!' });
+      const resistor = () => {
+        const g = k.group(k.at(k.rot(k.cyl(0.022, 0.022, 0.13, 0xd9b38c, 10), 0, 0, Math.PI / 2), 0, 0, -0.03));
+        [0xc0392b, 0x8e44ad, 0x1b1b1b].forEach((c, i) => g.add(k.at(k.rot(k.cyl(0.024, 0.024, 0.012, c, 10), 0, 0, Math.PI / 2), -0.035 + i * 0.025, 0, -0.03)));
+        return g;
+      };
+      const RES = { name: 'Resistor', say: 'A resistor slows electricity down, like a narrow pipe slows water.', fact: 'The colored stripes are a secret code that tells how much it slows things down.' };
+      [[-0.72, 0.1], [-0.72, 0.2], [0.12, 0.58], [0.45, -0.25]].forEach(([x, y], i) => P(Object.assign({ id: 'resP' + i, obj: resistor(), at: [x, y], level: 3 }, RES)));
+      P({ id: 'opto', name: 'Light messenger chip', obj: chip(0.12, 0.08, 0.03, 0xf2efe6, 2), at: [0.6, 0.25], level: 3,
+        say: 'This chip sends messages with a tiny light inside, so the strong side and the gentle side never touch.', fact: 'It is called an optocoupler. It keeps the strong wall electricity away from the chips.' });
+      P({ id: 'ycap', name: 'Safety capacitor', obj: disc(0.06, 0x2a5fd6), at: [-0.31, -0.05], level: 3,
+        say: 'A little blue safety capacitor. It stops electrical noise from leaking out.' });
       [[-0.75, 0.45], [0.3, 0.55], [0.78, -0.48]].forEach(([x, y], i) => P({ id: 'scapP' + i, name: 'Small capacitor', obj: elcap(0.05, 0.13, [0x2e8b57, 0x1b6fa8, 0x7a3fb0][i]), at: [x, y],
         say: 'A small capacitor. It soaks up little bumps in the electricity.' }));
 
@@ -405,6 +430,9 @@
         say: 'The speaker wires plug in here.', breaks: 'The sound stopped!' });
       Mn({ id: 'lvdsConn', name: 'Picture cable plug', obj: conn(0.3, 0.07, 0.07, 0xf2efe6, 8), at: [-0.2, 0.48], blockedBy: ['lvds'],
         say: 'The picture cable to the T-con board plugs in here.', breaks: 'The picture stopped! The light is on, but nothing is showing.' });
+      [[-0.72, 0.38], [0.12, -0.22], [0.47, 0.45]].forEach(([x, y], i) => Mn(Object.assign({ id: 'resM' + i, obj: resistor(), at: [x, y], level: 3 }, RES)));
+      Mn({ id: 'vreg', name: 'Power chip', obj: chip(0.1, 0.1, 0.03, 0x1a1a1d, 3), at: [-0.33, 0.3], level: 3,
+        say: 'This power chip gives the brain exactly the gentle electricity it needs.' });
       [[-0.75, 0.15], [0.25, -0.3]].forEach(([x, y], i) => Mn({ id: 'scapM' + i, name: 'Small capacitor', obj: elcap(0.045, 0.12, 0x1b6fa8), at: [x, y],
         say: 'A small capacitor. It soaks up little bumps in the electricity.' }));
 
@@ -491,6 +519,19 @@
       add({ id: 'harness', name: 'Power wires', obj: harness, pull: [0, -0.3, -1.6], blockedBy: ['cover'], face: [0, 0, -1],
         say: 'These colored wires carry power from the power board to the main board.', breaks: 'The main board lost its power! The screen went dark.' });
 
+      const L1 = ['stand', 'strip0', 'strip1', 'strip2', 'strip3', 'strip4', 'diffuser', 'panel', 'bezel', 'cover', 'cs0', 'cs2', 'cs5', 'cs7',
+        'psu', 'mainboard', 'tcon', 'spkL', 'spkR', 'cord', 'hdmi'];
+      const L2 = ['ss0', 'ss1', 'reflector', 'film1', 'film2', 'film3', 'polarF', 'irSensor', 'cs1', 'cs3', 'cs4', 'cs6', 'fuse', 'bigcap1', 'transformer',
+        'heatsinkP', 'ledDriver', 'heatsinkM', 'soc', 'ram1', 'wifi', 'hdmiP1', 'amp', 'timing', 'coneL', 'coneR', 'lvds', 'harness'];
+      const FUSE = { ss0: 'stand', ss1: 'stand', film1: 'diffuser', film2: 'diffuser', film3: 'diffuser', cs1: 'cover', cs3: 'cover', cs4: 'cover', cs6: 'cover', lvds: 'tcon', harness: 'psu' };
+      parts.forEach((p) => {
+        if (p.level) return;
+        p.level = L1.indexOf(p.id) >= 0 ? 1 : L2.indexOf(p.id) >= 0 || /^led\d_\d$/.test(p.id) || /^(ps|ms|ts)\d$/.test(p.id) ? 2 : 3;
+        if (FUSE[p.id]) p.fuse = FUSE[p.id];
+        else if (/^ps\d$/.test(p.id)) p.fuse = 'psu';
+        else if (/^ms\d$/.test(p.id)) p.fuse = 'mainboard';
+        else if (/^ts\d$/.test(p.id)) p.fuse = 'tcon';
+      });
       return { root, shell: [shell], parts, screen: scr, refs };
     },
 
@@ -536,11 +577,19 @@
     },
 
     apply(out, inst) {
-      const r = inst.refs;
-      r.ledRows.forEach((row, ri) => row.forEach(({ id, meshes, halo }) => {
-        const lit = out.strips && out.strips[ri] && inst.byId[id].target === 0;
-        meshes.forEach((m) => { m.material.emissiveIntensity = lit ? m.userData.glowI : 0; });
-        halo.visible = !!lit;
+      const r = inst.refs, k3 = THREE;
+      r.ledRows.forEach((row, ri) => row.forEach(({ id, chipM, dome, halo, lens, ph }) => {
+        const me = inst.byId[id], cap = inst.byId[lens], coat = inst.byId[ph];
+        const lit = !!(out.strips && out.strips[ri] && (!me || me.target === 0));
+        const blue = !!(coat && coat.target === 1);
+        chipM.material.emissive.setHex(blue ? 0x2a48ff : 0xfff2c0);
+        chipM.material.emissiveIntensity = lit ? chipM.userData.glowI : 0;
+        dome.material.emissiveIntensity = lit && (!cap || cap.target === 0) ? dome.userData.glowI : 0;
+        halo.material.color.setHex(blue ? 0x2f5bff : 0xffffff);
+        const blend = blue ? k3.NormalBlending : k3.AdditiveBlending; // blue is drawn solid so it shows on the white sheet
+        if (halo.material.blending !== blend) { halo.material.blending = blend; halo.material.needsUpdate = true; }
+        halo.scale.setScalar(blue ? 1.4 : 1);
+        halo.visible = lit;
       }));
       r.diffuser.material.emissiveIntensity = 0.85 * (out.glow || 0);
       r.standby.material.emissiveIntensity = out.standby ? 2.5 : 0;
@@ -548,7 +597,7 @@
 
     // Screen layers are nearly invisible while on the panel, and show up as sheets once peeled off.
     tick(dt, t, inst) {
-      inst.refs.layers.forEach(({ id, mesh }) => { mesh.material.opacity = (id === 'tft' ? 0.02 : 0.07) + 0.5 * inst.byId[id].t; });
+      inst.refs.layers.forEach(({ id, mesh }) => { const p = inst.byId[id]; mesh.material.opacity = (id === 'tft' ? 0.02 : 0.07) + 0.5 * (p ? p.t : 0); });
     },
   });
 
