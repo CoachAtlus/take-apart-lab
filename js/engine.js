@@ -1106,6 +1106,22 @@
     } else Sound.off();
     Guide.advance();
   }
+  // A world can offer a step dial instead of plain on/off (e.g. how much electricity reaches the liquid crystal).
+  function updateDial() {
+    const d = App.inst && App.inst.def.dial, b = $('#btnDial');
+    b.hidden = !d; $('#btnPower').hidden = !!d;
+    if (d) b.querySelector('.lb').textContent = `${d.label}: ${d.steps[App.inst.dial || 0].name}`;
+  }
+  function nextDial() {
+    const inst = App.inst, d = inst && inst.def.dial;
+    if (!d) return;
+    inst.dial = ((inst.dial || 0) + 1) % d.steps.length;
+    Sound.click();
+    updateDial();
+    refresh();
+    const st = d.steps[inst.dial];
+    if (st.say) Voice.say(st.say);
+  }
   function nextChannel() {
     const inst = App.inst;
     if (!inst || !inst.def.channels) return;
@@ -1582,6 +1598,7 @@
     refresh();
     $('#home').hidden = true; $('#hud-top').hidden = false; $('#tools').hidden = false; $('#zoomCtl').hidden = false;
     $('#btnChannel').hidden = !def.channels;
+    inst.dial = 0; updateDial();
     $('#btnMission').hidden = world || !inst.parts.some((p) => p.symptom);
     updateMissionUI();
     updateCrumbs();
@@ -1658,6 +1675,7 @@
     if (st.focus && st.focus.target === 1) { App.focus = st.focus; $('#focusBar').hidden = false; $('#focusName').textContent = st.focus.name; }
     else $('#focusBar').hidden = true;
     $('#btnChannel').hidden = !App.inst.def.channels;
+    updateDial();
     $('#btnMission').hidden = App.stack.length > 0 || !App.inst.parts.some((p) => p.symptom);
     updateMissionUI();
     updateCrumbs();
@@ -1876,6 +1894,7 @@
     on('#lookBadge', () => { if (Caption.part) diveInto(Caption.part); });
     on('#btnPower', togglePower);
     on('#btnChannel', nextChannel);
+    on('#btnDial', nextDial);
     on('#btnTurn', () => { App.yawT += Math.PI; Sound.whoosh(); });
     on('#btnXray', () => { setXray(!App.xray); Sound.click(); if (App.xray) Caption.show('X-ray vision! Now you can see inside the case.'); });
     on('#btnApart', explodeAll);
@@ -2185,7 +2204,7 @@
     openDevice: (id, level) => openDevice(TAL.devices.find((d) => d.id === id), level), togglePower,
     voice: () => ({ clips: window.TAL_VOICE ? Object.keys(window.TAL_VOICE.clips).length : 0, talking: Voice.talking, src: Voice.el && Voice.el.src.slice(-20), unlocked: Voice.unlocked, ctx: Sound.ctx && Sound.ctx.state }), explodeAll, fixAll, startMission, nextChannel, setXray, hint,
     enterFocus: (id) => enterFocus(byId(id)), exitFocus,
-    pull: (id) => tryRemove(byId(id)),
+    pull: (id) => tryRemove(byId(id)), dial: () => { nextDial(); return $('#btnDial .lb').textContent; },
     dive: (id) => diveInto(byId(id)), back: () => goBack(), touch: (id) => { const p = byId(id); Voice.say(p.say, learnFor(p)); Caption.setPart(p); },
     deeper: () => { Caption.deeper(); return $('#capText').textContent; },
     crumbs: () => $('#devName').textContent + ' [' + $('#devLevel').textContent + ']',
