@@ -872,7 +872,7 @@
       inst.parts.push(part);
       inst.byId[part.id] = part;
     });
-    inst.parts.forEach((p) => { p.hasInside = !!insideOf(p); });
+    inst.parts.forEach((p) => { p.worldId = def.id; p.hasInside = !!insideOf(p); });
     inst.parts.forEach((p) => {
       if (!p.parent) return;
       const par = inst.byId[p.parent];
@@ -1604,7 +1604,11 @@
   }
   function insideOf(p) {
     const id = p && (p.inside || TAL.insideByName[p.name]);
-    return id && TAL.worlds[id] ? id : null;
+    if (!id || !TAL.worlds[id]) return null;
+    // A part named like the thing it sits inside ("Color filter" inside the pixel) must not
+    // open the world you're already in, or any world above you: that's a loop, not a dive.
+    if (id === p.worldId || App.stack.some((st) => st.inst.def.id === id)) return null;
+    return id;
   }
   // Fly into a part, then open the world inside it.
   function diveInto(p) {
