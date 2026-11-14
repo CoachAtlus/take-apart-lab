@@ -643,43 +643,72 @@
   });
 
   world({
-    id: 'liquid-crystal', name: 'Liquid crystal molecules', zoom: '10,000×', short: 'liquid crystal',
-    view: view(1.4, 2.5, 3.0),
-    intro: 'Ten thousand times bigger! These rods are liquid crystal molecules between two sheets of glass. The power button turns the electricity on and off. Watch them stand up!',
+    id: 'liquid-crystal', name: 'Liquid crystal molecules', startOn: false, zoom: '10,000×', short: 'liquid crystal',
+    view: view(1.4, 3.0, 3.6),
+    intro: 'Ten thousand times bigger! These rods are liquid crystal molecules, floating between two sheets of glass. Press Power to send electricity in, and watch the molecules stand up. Press it again and watch them twist back.',
     shellSay: 'Liquid crystal molecules between two sheets of glass.',
     build(k) {
       const root = k.group(), parts = [], add = (s) => parts.push(part(k, root, s));
       const glass = (y) => k.box(2.8, 0.08, 2.0, k.glass(0xd8f0ff, 0.35, { depthWrite: true }));
-      add({ id: 'glassB', name: 'Bottom glass', obj: k.group(k.at(glass(), 0, 0.3, 0)), pull: [0, -0.2, 2.6], tagAt: [-1.6, 0.3, 1.1],
-        say: 'The bottom glass has tiny grooves that line up the first layer of molecules.',
-        learn: ['The grooves are made by rubbing a thin coating in one direction, a bit like brushing a cat the same way every time.'] });
-      add({ id: 'glassT', name: 'Top glass', obj: k.group(k.at(glass(), 0, 2.5, 0)), pull: [0, 1.6, 0], tagAt: [-1.6, 2.7, 1.1],
-        say: 'The top glass has grooves turned a quarter turn the other way. That is what makes the twist.' });
-      const rods = [], rodGroup = k.group(), rmat = k.mat(0x7fd6ff, { roughness: 0.3 });
+      // the see-through wire layer coated on the inside of each glass
+      const itoMat = (c) => k.mat(c, { transparent: true, opacity: 0.35, roughness: 0.3, emissive: c, emissiveIntensity: 0, depthWrite: false });
+      const itoB = itoMat(0x4a8cff), itoT = itoMat(0xff5a4a);
+      add({ id: 'glassB', name: 'Bottom glass', obj: k.group(k.at(glass(), 0, 0.3, 0), k.at(k.box(2.8, 0.02, 2.0, itoB), 0, 0.355, 0)), pull: [0, -0.2, 2.6], tagAt: [-1.6, 0.3, 1.1],
+        say: 'The bottom glass has a see-through wire layer and tiny grooves that line up the first layer of molecules.',
+        learn: ['The grooves are made by rubbing a thin coating in one direction, a bit like brushing a cat the same way every time.', 'The wire layer is so thin that light goes right through it, but electricity can still flow in it. It is made of a metal called indium tin oxide.'] });
+      add({ id: 'glassT', name: 'Top glass', obj: k.group(k.at(glass(), 0, 2.5, 0), k.at(k.box(2.8, 0.02, 2.0, itoT), 0, 2.445, 0)), pull: [0, 1.6, 0], tagAt: [-1.6, 2.7, 1.1],
+        say: 'The top glass has its own see-through wire layer, and grooves turned a quarter turn the other way. That is what makes the twist.' });
+      // each molecule: a rod whose two halves pick up a little + and a little - when the electricity is on
+      const rods = [], rodGroup = k.group(), base = new T.Color(0x7fd6ff);
+      const posMat = k.mat(0x7fd6ff, { roughness: 0.3 }), negMat = k.mat(0x7fd6ff, { roughness: 0.3 });
       for (let layer = 0; layer < 6; layer++) for (let i = 0; i < 5; i++) for (let j = 0; j < 3; j++) {
-        const m = k.cyl(0.05, 0.05, 0.45, rmat, 8);
+        const m = k.group(k.at(k.cyl(0.05, 0.05, 0.22, posMat, 8), 0, 0.11, 0), k.at(k.cyl(0.05, 0.05, 0.22, negMat, 8), 0, -0.11, 0));
         m.position.set(-1.0 + i * 0.5, 0.6 + layer * 0.34, -0.55 + j * 0.55);
         rodGroup.add(m);
-        rods.push({ m, twist: (layer / 5) * (Math.PI / 2) });
+        rods.push({ m, twist: (layer / 5) * (Math.PI / 2), rate: 1.1 + Math.random() * 1.2, v: 0 });
       }
       add({ id: 'rods', name: 'Crystal molecules', fixed: true, obj: rodGroup, tagAt: [1.8, 2.2, 0.9],
-        say: 'These rods are liquid crystal molecules. They line up like fish swimming in a school.',
-        learn: ['With no electricity, each layer turns a little more than the one below it, making a gentle twist.', 'The twist turns the wiggle of the light a quarter turn, so it can get through the front filter.', 'Add electricity and the molecules stand up straight. The twist is gone, so the light gets blocked. That is how a pixel turns dark.'] });
+        say: 'These rods are liquid crystal molecules. They are a liquid, so they can turn, but they like to line up together, like fish swimming in a school.',
+        learn: ['With no electricity, the grooves on the glass line up the molecules touching them. The bottom grooves and top grooves point different ways, so the molecules in between make a slow quarter turn, like a spiral staircase.',
+          'Light rides up the staircase. The twist turns the light\'s wiggle a quarter turn, so it lines up with the front filter and gets out. The pixel is bright.',
+          'Press Power. The top wire layer fills up with plus charge and the bottom one with minus charge. That makes an invisible push, called an electric field, straight up and down between them: the purple dots.',
+          'The push tugs on the tiny electrons inside each molecule. One end gets a little bit minus and the other end a little bit plus, the red and blue halves. The field pulls those ends opposite ways, so the molecule swings around until it stands up straight, like a compass needle swinging to point north.',
+          'Standing up, the molecules can\'t twist the light anymore, so the front filter soaks it up and the pixel goes dark. A little electricity tips them only part way, which makes grey. Turn it off and the grooves pull them back into the staircase in a few thousandths of a second.'] });
       const wavePts = new Float32Array(120 * 3), waveGeo = new T.BufferGeometry();
       waveGeo.setAttribute('position', new T.BufferAttribute(wavePts, 3));
       const wave = new T.Line(waveGeo, new T.LineBasicMaterial({ color: 0xffe9a0, toneMapped: false })); wave.frustumCulled = false;
       const outGlowMat = new T.MeshBasicMaterial({ color: 0xfff1c0, transparent: true, opacity: 0, toneMapped: false });
       const outGlow = k.at(k.mesh(new T.PlaneGeometry(2.6, 1.8), outGlowMat), 0, 2.9, 0); outGlow.rotation.x = -Math.PI / 2; outGlow.userData.noPick = true;
       const tag = k.label('Light', { size: 0.16 }); tag.position.set(1.55, 0.2, 1.0);
-      root.add(wave, outGlow, tag);
-      return { root, parts, refs: { rods, wavePts, waveGeo, outGlowMat, s: 1 } };
+      // the electric field: purple dots streaming from the + layer to the - layer
+      const field = [-1.3, -0.65, 0, 0.65, 1.3].map((x, i) => k.flow([[x, 2.42, -1.0], [x, 0.38, -1.0]], { count: 5, color: 0xc77dff, size: 0.2, phase: i / 5 }));
+      const plus = k.label('+  +  +  +  plus  +  +  +  +', { size: 0.14, bg: 'rgba(200,50,40,0.9)' }); plus.position.set(0, 2.8, -1.05);
+      const minus = k.label('-  -  -  -  minus  -  -  -  -', { size: 0.14, bg: 'rgba(40,90,200,0.9)' }); minus.position.set(0, 0.0, -1.05);
+      const states = ['No electricity: twisted, light gets through', 'Turning...', 'Electricity on: standing up, light is blocked'].map((txt) => {
+        const l = k.label(txt, { size: 0.15 }); l.position.set(0, 3.3, 0); l.visible = false; return l;
+      });
+      root.add(wave, outGlow, tag, ...field, plus, minus, ...states);
+      return { root, parts, refs: { rods, wavePts, waveGeo, outGlowMat, s: 1, field, plus, minus, states, posMat, negMat, itoB, itoT, base } };
     },
     evaluate(has, on) { return { alive: on, volt: on && has('glassT') && has('glassB') }; },
     tick(dt, t, inst, out) {
-      const r = inst.refs, want = out && out.volt ? 1 : 0;
-      r.s += (want - r.s) * Math.min(1, dt * 3);
+      const r = inst.refs, volt = !!(out && out.volt), want = volt ? 1 : 0;
+      r.s += (want - r.s) * Math.min(1, dt * 1.6);
+      // the engine gives each mesh its own material, so colour the meshes themselves
+      if (!r.halves) { r.halves = []; r.rods.forEach(({ m }) => { r.halves.push([m.children[0], -1], [m.children[1], 1]); // top end faces the + layer, so it turns minus }); }
+      // charge first, then the molecules swing (each a touch slower or faster than its neighbour)
       const up = new T.Quaternion(), tw = new T.Quaternion(), flat = new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 0, 1), Math.PI / 2);
-      r.rods.forEach(({ m, twist }) => { tw.setFromAxisAngle(new T.Vector3(0, 1, 0), twist).multiply(flat); m.quaternion.copy(tw).slerp(up, r.s); });
+      r.rods.forEach((rod) => {
+        const { m, twist } = rod;
+        rod.v += (want - rod.v) * Math.min(1, dt * rod.rate); const s = rod.v;
+        tw.setFromAxisAngle(new T.Vector3(0, 1, 0), twist).multiply(flat); m.quaternion.copy(tw).slerp(up, s);
+      });
+      const red = new T.Color(0xff3a2a), blue = new T.Color(0x2a6cff);
+      r.halves.forEach(([h, sign]) => { h.material.color.copy(r.base).lerp(sign > 0 ? red : blue, r.s); });
+      r.field.forEach((f) => { f.visible = volt; }); if (volt) upd(r.field, dt, 0.5);
+      r.plus.visible = r.minus.visible = r.s > 0.2;
+      const which = r.s < 0.15 ? 0 : r.s > 0.85 ? 2 : 1;
+      r.states.forEach((l, i) => { l.visible = i === which; });
       const pass = 1 - r.s, top = 0.1 + 2.8 * (0.35 + 0.65 * pass);
       for (let i = 0; i < 120; i++) {
         const y = 0.1 + (2.8 * i) / 119, f = Math.min(1, Math.max(0, (y - 0.6) / 1.7)), ang = f * (Math.PI / 2) * pass;

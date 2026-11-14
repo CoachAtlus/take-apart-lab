@@ -374,6 +374,9 @@
     },
     // more: one extra line (string), or { levels, i } to step deeper one tap at a time
     show(text, more) {
+      // Look inside belongs to the part Sparky is talking about. A new line about something
+      // else (a blocked part, a put-back, a hint) drops it, so the button never points elsewhere.
+      if (text !== this.partText) this.part = null;
       this.txt.textContent = text;
       if (typeof more === 'string') more = { levels: [more], i: 0 };
       this.learn = more && more.levels && more.levels.length ? more : null;
@@ -382,7 +385,7 @@
       clearTimeout(this.timer);
       this.timer = setTimeout(() => { if (!Voice.talking) this.el.classList.remove('show'); }, Math.max(8000, text.split(' ').length * 450 + 6000));
     },
-    setPart(p) { this.part = p || null; this.refresh(); },
+    setPart(p) { this.part = p || null; this.partText = this.txt.textContent; this.refresh(); },
     refresh() {
       const L = this.learn;
       this.more.hidden = !(L && L.i < L.levels.length);

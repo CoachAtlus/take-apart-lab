@@ -381,9 +381,9 @@
   // =====================================================================  polarizer
   world({
     id: 'polarizer-inside', name: 'Inside a polarizer', zoom: '10,000×', short: 'polarizer',
-    view: view(1.2, 4.3, 5.2, -0.9, 0.3),
-    intro: 'This is a polarizer, 10,000 times bigger. Light wiggles as it travels. The blue light wiggles up and down. The yellow light wiggles side to side. Watch which one gets through! Then pull the long chains out and see what happens.',
-    shellSay: 'A polarizer sheet, seen from the side, with light going through it.',
+    view: view(1.2, 4.6, 5.4, -0.75, 0.32),
+    intro: 'This is a polarizer, 10,000 times bigger. Light wiggles as it travels, like a jump rope you shake. The blue rope shakes up and down. The yellow rope shakes side to side. The long chains in the sheet lie side to side, and they soak up any light that wiggles the same way they lie. Watch: only the blue gets through! Now pull the chains out.',
+    shellSay: 'A polarizer sheet, seen from the side, with two kinds of light going through it.',
     build(k) {
       const root = k.group(), parts = [], add = (s) => parts.push(part(k, root, s));
       const chains = k.group(), chainMat = k.mat(0xe8e2f0, { roughness: 0.5 }), iodine = k.mat(0x5a2a7a, { roughness: 0.4 });
@@ -392,31 +392,37 @@
         chains.add(k.at(k.rot(k.cyl(0.03, 0.03, 2.1, chainMat, 8), Math.PI / 2, 0, 0), x, y, 0));
         for (let d = 0; d < 7; d++) chains.add(k.at(k.sphere(0.045, iodine, 8), x, y, -0.9 + d * 0.3));
       }
-      add({ id: 'chains', name: 'Long chains', obj: chains, blockedBy: ['films'], pull: [0, 0, -3.2], tagAt: [0, 2.55, -1.1],
-        say: 'Long plastic chains, all stretched to point the same way, with purple iodine stuck along them.',
-        learn: ['Light that wiggles along the chains gets soaked up by them. Light that wiggles across the chains slips through the gaps.', 'Makers stretch the plastic like taffy so every chain lines up. Then they dip it in iodine, which does the soaking up.', 'The light that gets through is called polarized light. Your screen needs two of these sheets, turned different ways, to make a picture.'] });
-      const filmMat = k.mat(0xdff3ff, { transparent: true, opacity: 0.3, roughness: 0.2, depthWrite: false });
+      add({ id: 'chains', name: 'Long chains', obj: chains, pull: [0, 0, -3.2], tagAt: [0, 2.55, -1.1],
+        say: 'These long chains all lie side to side. Light that wiggles the same way they lie gets soaked up. Pull them out to see what happens!',
+        learn: ['Think of each chain as a long sponge lying sideways. The yellow light wiggles along the sponge, so the sponge soaks it up. The blue light wiggles across it, so it only brushes past and slips through.',
+          'The chains are plastic, stretched like taffy so they all line up the same way. Then they are dipped in iodine, the purple dots. The iodine is what does the soaking.',
+          'The light that comes out wiggles only one way. That is called polarized light. A TV has two of these sheets, turned different ways, with the liquid crystal in between deciding how much light makes it through both.',
+          'Polarized sunglasses use the same trick. Glare bouncing off water mostly wiggles side to side, so the sunglasses soak it up.'] });
+      const filmMat = k.mat(0xdff3ff, { transparent: true, opacity: 0.25, roughness: 0.2, depthWrite: false });
       add({ id: 'films', name: 'Clear covers', obj: k.group(k.at(k.box(0.06, 2.4, 2.4, filmMat), -0.22, 1.25, 0), k.at(k.box(0.06, 2.4, 2.4, filmMat), 0.22, 1.25, 0)), pull: [0, 3.0, 0], tagAt: [0.25, 2.75, 0.9],
-        say: 'Two clear covers keep water and scratches away from the chains.',
-        learn: ['The chains are delicate. Water makes them lose their line, and then the filter stops working.', 'One of these is peeled off in the factory so the sheet can be glued onto the glass.'] });
-      const inLab = k.label('Light comes in', { size: 0.15 }); inLab.position.set(-2.4, 2.35, 0);
-      const outLab = k.label('Light goes out', { size: 0.15 }); outLab.position.set(2.4, 2.35, 0);
-      const vDots = lightDots(k, root, 14, 0x6fc8ff, 0.1), hDots = lightDots(k, root, 14, 0xffd23a, 0.1);
-      const hStop = k.label('Soaked up!', { size: 0.16, bg: 'rgba(120,60,150,0.9)' }); hStop.position.set(0.5, 0.15, -0.55); hStop.visible = false;
-      root.add(inLab, outLab, hStop);
-      return { root, parts, refs: { vDots, hDots, hStop, s: 0 } };
+        say: 'Two clear covers keep water and scratches away from the chains. They do not change the light.',
+        learn: ['The chains are delicate. Water makes them lose their line, and then the filter stops working.', 'One cover is glued right onto the TV glass.'] });
+      // two "ropes" of light, drawn as beads so you can see the wiggle
+      const N = 56, X0 = -2.8, X1 = 2.8;
+      const vBeads = lightDots(k, root, N, 0x6fc8ff, 0.065), hBeads = lightDots(k, root, N, 0xffd23a, 0.065);
+      const lab = (txt, x, y, z, bg) => { const l = k.label(txt, { size: 0.15, bg }); l.position.set(x, y, z); root.add(l); return l; };
+      lab('Wiggles up and down', -2.3, 2.0, 0.6, 'rgba(30,110,190,0.92)');
+      lab('Wiggles side to side', -2.3, 0.55, -0.6, 'rgba(170,120,0,0.92)');
+      const vOut = lab('Gets through!', 2.2, 2.0, 0.6, 'rgba(30,140,80,0.92)');
+      const hStop = lab('Soaked up!', 0.55, 0.55, -0.6, 'rgba(120,60,150,0.92)');
+      const hOut = lab('Gets through too!', 2.2, 0.55, -0.6, 'rgba(30,140,80,0.92)');
+      return { root, parts, refs: { vBeads, hBeads, vOut, hStop, hOut, N, X0, X1 } };
     },
     evaluate(has, on) { return { alive: on, filter: has('chains') }; },
     tick(dt, t, inst, out) {
-      const r = inst.refs, on = out && out.alive, filt = out && out.filter;
-      r.s = (r.s + dt * 0.12) % 1;
-      const place = (dots, vertical) => dots.forEach((m, i) => {
-        const f = (r.s + i / dots.length) % 1, x = -2.6 + f * 5.2, w = 0.32 * Math.sin(x * 5);
-        m.position.set(x, vertical ? 1.25 + w : 1.25, vertical ? 0.55 : -0.55 + w);
-        m.visible = on && !(!vertical && filt && x > 0.05);
+      const r = inst.refs, on = !!(out && out.alive), filt = !!(out && out.filter);
+      const rope = (beads, vertical) => beads.forEach((m, i) => {
+        const x = r.X0 + (r.X1 - r.X0) * (i / (r.N - 1)), w = 0.3 * Math.sin(x * 4.5 - t * 6);
+        m.position.set(x, vertical ? 1.3 + w : 1.3, vertical ? 0.6 : -0.6 + w);
+        m.visible = on && !(!vertical && filt && x > 0.1);
       });
-      place(r.vDots, true); place(r.hDots, false);
-      r.hStop.visible = !!(on && filt);
+      rope(r.vBeads, true); rope(r.hBeads, false);
+      r.vOut.visible = on; r.hStop.visible = on && filt; r.hOut.visible = on && !filt;
     },
   });
 
