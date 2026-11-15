@@ -6,18 +6,18 @@
 
 A 3D take-it-apart game for a 5-year-old. Pick a device, spin it around, tap parts to pull them out, and watch what breaks. A friendly voice explains each part. A "Fix-it mission" breaks one part; the kid reads the symptom and finds it.
 
-Devices so far, with pieces at Beginner / Medium / Advanced:
+Devices so far, with pieces at Beginner / Medium / Advanced. Advanced is a real teardown: every board, module and switch comes apart into its own pieces.
 
-- Old Tube TV: 10 / 21 / 45
+- Old Tube TV: 10 / 34 / 100
 - Flat LED TV: 21 / 109 / 266
-- Flashlight: 6 / 8 / 17
-- TV Remote: 7 / 14 / 25 (the invisible infrared flash shows up on a phone camera)
-- Toaster: 7 / 15 / 24 (glowing wires, a browning dial, toast that pops)
-- Solar Garden Light: 6 / 12 / 20 (a Day/Night dial charges and drains the battery)
-- Toy Car: 7 / 15 / 26 (motor, gears and wheels turn)
-- Doorbell: 5 / 11 / 16 (an electromagnet goes ding-dong)
-- Game Controller: 8 / 15 / 25 (rumble motors shake it)
-- Phone: 6 / 12 / 20
+- Flashlight: 6 / 16 / 36
+- TV Remote: 7 / 22 / 47 (the invisible infrared flash shows up on a phone camera)
+- Toaster: 7 / 22 / 55 (glowing wires, a browning dial, toast that pops)
+- Solar Garden Light: 6 / 22 / 48 (a Day/Night dial charges and drains the battery)
+- Toy Car: 7 / 22 / 58 (motor, gears and wheels turn)
+- Doorbell: 5 / 18 / 47 (an electromagnet goes ding-dong)
+- Game Controller: 8 / 26 / 79 (rumble motors shake it)
+- Phone: 6 / 30 / 84
 
 Sparky, a talking robot, walks the kid through each device step by step: a glowing ring shows what to touch, an arrow shows which way to drag, and he nudges if nothing happens for a while.
 

@@ -1,4 +1,4 @@
-/* TV remote: a rubber button mat, a circuit board and a light you cannot see. Beginner 7 pieces, Medium 14, Advanced 25.
+/* TV remote: a rubber button mat, a circuit board and a light you cannot see. Beginner 7 pieces, Medium 22, Advanced 47.
  * Power = pressing the Power button: the chip flashes an infrared LED, and a toy phone camera shows the flash as purple.
  * Also registers one inside world: 'infrared-light' (waves too long to see, and the camera trick). */
 (function () {
@@ -135,10 +135,11 @@
   const helixPts = (cx, cz, y0, h, r, turns) => Array.from({ length: 34 }, (_, i) => { const f = i / 33, a = f * turns * Math.PI * 2; return [cx + Math.cos(a) * r, y0 + h * f, cz + Math.sin(a) * r]; });
 
   // button layout (x, y, radius, color); the first one is Power
-  const BTN = [{ x: -0.4, y: 1.62, r: 0.13, c: 0xd8342c, pwr: true }, { x: 0.4, y: 1.62, r: 0.11, c: 0x6b7280 }];
+  const BTN = [{ x: -0.4, y: 1.62, r: 0.13, c: 0xd8342c, pwr: true, g: 'power' }, { x: 0.4, y: 1.62, r: 0.11, c: 0x6b7280, g: 'input' }];
+  const ROWG = ['num', 'num', 'num', 'arrow', 'vol', 'chan', 'menu'];
   [1.15, 0.78, 0.41, 0.04, -0.33, -0.7, -1.07].forEach((y, ri) => [-0.38, 0, 0.38].forEach((x, ci) => {
     const mid = ri === 3 && ci === 1;
-    BTN.push({ x, y, r: mid ? 0.12 : 0.095, c: mid ? 0x3d4a63 : 0x4a4f5a });
+    BTN.push({ x, y, r: mid ? 0.12 : 0.095, c: mid ? 0x3d4a63 : 0x4a4f5a, g: mid ? 'ok' : ROWG[ri] });
   }));
 
   TAL.registerDevice({
@@ -148,7 +149,7 @@
     subtitle: 'It talks with light you cannot see',
     powerSound: 'click',
     channels: false,
-    view: { target: [0.9, 3.0, 0], radius: 3.7, explodedRadius: 6.4, explodedY: 3.0, yaw: -0.35, pitch: 0.12, shadow: [4, 2.4] },
+    view: { target: [0.9, 3.0, 0], radius: 3.7, explodedRadius: 4.5, explodedY: 3.1, yaw: -0.35, pitch: 0.12, shadow: [4, 2.4] },
     intro: 'This is a TV remote. Press the green power button, like pressing Power on the remote. It sends a secret message with light your eyes cannot see. The phone can see it!',
     shellSay: "That's the front of the remote. The rubber buttons poke up through it. Try the X-ray button to see inside!",
     guide: [
@@ -159,6 +160,7 @@
       { do: 'remove', ids: ['back'], say: 'Now lift off the back case. Now you can see the circuit board!', nudge: 'Pull the back case off.' },
       { do: 'remove', ids: ['led'], levels: [2, 3], say: 'Find the little infrared light at the top of the board and pull it off. Watch the phone!', nudge: 'Pull off the little light at the top.' },
       { do: 'remove', ids: ['bat1'], say: 'Now slide out a battery! What happens?', nudge: 'Pull out a battery.' },
+      { do: 'remove', ids: ['bs1', 'bs2'], levels: [3], say: 'Two little screws hold the circuit board in. Twist them out.', nudge: 'Pull out the glowing screw.' },
       { do: 'remove', ids: ['board'], say: 'Lift out the green circuit board. It is the remote\'s brain home!', nudge: 'Pull out the green board.' },
       { do: 'remove', ids: ['mat'], say: 'Last, pull out the rubber button mat. Without it, there is nothing to press!', nudge: 'Pull out the rubber mat.' },
       { do: 'end', say: 'A remote needs batteries, a button mat, a board with a chip, and a light. Put them all back and press power again!' },
@@ -220,12 +222,36 @@
       const ringB = rr(new T.Shape(), W, H, 0.3); ringB.holes.push(rr(new T.Path(), W - 0.1, H - 0.1, 0.25));
       const back = k.group(extrude(plateS, 0.05, backMat, -0.3), extrude(ringB, 0.28, backMat, -0.3));
       body.add(back);
-      add({ id: 'back', name: 'Back case', obj: back, xray: true, pull: [0, 0, -2.4], blockedBy: ['door', 'sc1', 'sc2', 'sc3', 'sc4'], face: [0, 0, -1], focusRadius: 2.2,
+      add({ id: 'back', name: 'Back case', obj: back, xray: true, pull: [0, 0, -2.4], blockedBy: ['door', 'sc1', 'sc2', 'sc3', 'sc4'], reach: [], face: [0, 0, -1], focusRadius: 2.2,
         say: 'The back case is the lid of the remote. It keeps all the parts inside and fingers out.',
         job: 'It holds everything in and keeps fingers away from the board.',
         learn: ['Think of a lunch box. The back case is the lid that keeps everything snug inside.',
           'It is molded plastic. Plastic does not carry electricity, so it keeps the board safe from your hands, and your hands safe from the board.',
           'Remotes use two halves of plastic that fit together like a shell. Screws, or snap tabs, hold the halves closed.'] });
+      // a printed sticker and two rubber feet on the outside of the back case
+      const sticker = k.decal(0.78, 0.9, (c, w, h) => {
+        c.fillStyle = '#e9e6dc'; c.fillRect(0, 0, w, h);
+        c.fillStyle = '#4a4d55';
+        [0.1, 0.17, 0.24, 0.3].forEach((f, i) => c.fillRect(w * 0.1, h * f, w * (i % 2 ? 0.55 : 0.75), h * 0.03));
+        for (let i = 0; i < 36; i++) c.fillRect(w * 0.1 + i * w * 0.021, h * 0.55, 1 + (i * 7 % 3) * 2, h * 0.28);
+      }, 192);
+      k.rot(k.at(sticker, 0, 0.3, -0.303), 0, Math.PI, 0);
+      const stickerG = k.group(sticker);
+      body.add(stickerG);
+      sub(back, 'back', { id: 'sticker', name: 'Back sticker', obj: stickerG, pull: [0, 0.2, -1.0], level: 3, face: [0, 0, -1], focusRadius: 0.8,
+        say: 'A paper sticker with tiny print on it, like a name tag for the remote.', job: 'It tells which model the remote is, and who made it.',
+        learn: ['It is like a name tag. It says who made the remote and which one it is.',
+          'The little print also says what kind of batteries to use, and which way they go in.',
+          'Rules often require makers to print safety and model marks on a product, and a sticker is a cheap way to do it.'] });
+      [-0.3, 0.3].forEach((x, i) => {
+        const f = k.group(k.at(k.rot(k.cyl(0.075, 0.075, 0.03, k.mat(0x151618, { roughness: 0.95 }), 14), Math.PI / 2, 0, 0), x, -0.55, -0.315));
+        body.add(f);
+        sub(back, 'back', { id: 'foot' + (i + 1), name: 'Rubber foot', obj: f, pull: [x * 2.2, -0.5, -0.9], level: 3, face: [0, 0, -1], focusRadius: 0.4,
+          say: 'A little rubber dot on the back. It is grippy, like a shoe sole.', job: 'It stops the remote from sliding around on the table.',
+          learn: ['It is like the sole of a sneaker. It grips so you do not slip.',
+            'Rubber is soft and a bit sticky, so it holds on to a smooth table instead of sliding.',
+            'It also lifts the plastic a tiny bit off the table, so the case does not get scratched.'] });
+      });
       [[-0.5, 1.85], [0.5, 1.85], [-0.5, -0.9], [0.5, -0.9]].forEach(([x, y], i) => {
         const s = k.screw(0x9ea3ab, 0.3);
         k.rot(k.at(s, x, y, -0.3), -Math.PI / 2, 0, 0);
@@ -239,11 +265,18 @@
       const door = k.group(k.at(k.box(0.78, 0.98, 0.04, k.mat(0x3d424a, { roughness: 0.5 }), 12), 0, -1.52, -0.28));
       [-1.8, -1.74, -1.68].forEach((y) => door.add(k.at(k.box(0.5, 0.02, 0.02, k.mat(0x555b66, { roughness: 0.5 })), 0, y, -0.31)));
       body.add(door);
+      const catchG = k.group(k.at(k.box(0.2, 0.05, 0.05, k.mat(0x3d424a, { roughness: 0.5 })), 0, -1.06, -0.31));
+      door.add(catchG);
       add({ id: 'door', name: 'Battery door', obj: door, xray: true, pull: [0, -0.5, -2.0], face: [0, 0, -1], focusRadius: 1.4,
         say: 'The battery door slides off so you can change the batteries.', job: 'It keeps the batteries in and little fingers out.',
         learn: ['It is like the lid of a toy box, just for batteries.',
           'The little ridges give your thumb something to push. A tiny catch clicks into place to hold the door shut.',
           'Keeping batteries covered is a safety job, too. Small batteries should stay away from little children, who might put them in their mouths.'] });
+      add({ id: 'catch', name: 'Door catch', obj: catchG, parent: 'door', pull: [0, 0.5, -1.0], level: 3, face: [0, 0, -1], focusRadius: 0.4,
+        say: 'A tiny plastic hook on the door. It clicks into the case like a little hand holding on.', job: 'It clicks into the case so the battery door stays shut.',
+        learn: ['It is like a tiny hand that grabs the case and holds on.',
+          'The plastic bends a little when you slide the door, then springs back and snaps into a notch. That is the click you feel.',
+          'Plastic can be bent many times without breaking if the bend is small, which is why molded catches like this last for years.'] });
 
       // ---- batteries (+ springs, contacts, labels)
       const aaa = (cx, plusUp) => {
@@ -279,25 +312,45 @@
       const ct = (cx, y, id, bid) => {
         const c = k.group(k.at(k.box(0.17, 0.03, 0.14, metal(0xcfd5dc)), cx, y, -0.14));
         body.add(c);
-        add({ id, name: 'Battery contact', obj: c, pull: [cx < 0 ? -0.8 : 0.8, 0.2, -1.4], blockedBy: [bid], level: 3, fuse: 'board', face: [0, 0, -1], focusRadius: 0.5,
+        add({ id, name: 'Battery contact', obj: c, pull: [cx < 0 ? -0.8 : 0.8, 0.2, -1.4], blockedBy: [bid], level: 2, fuse: 'board', face: [0, 0, -1], focusRadius: 0.5,
           say: 'This shiny metal plate touches the end of the battery so electricity can flow.', breaks: 'The battery touches nothing, so no electricity flows!',
           learn: ['It is a little metal bridge between the battery and the rest of the remote.',
             'Metal lets electricity travel easily, so it is the right stuff for a bridge. Plastic would block the flow.',
             'The plate is usually steel with a thin coat of nickel or similar metal, so it stays shiny and does not rust.'] });
       };
       ct(-0.125, -1.0, 'ct1', 'bat1'); ct(0.125, -2.05, 'ct2', 'bat2');
+      // a metal strip joins the top of the two batteries so they work in a line
+      const link = k.group(k.at(k.box(0.4, 0.03, 0.05, metal(0xcfd5dc)), 0, -0.95, -0.14), k.at(k.box(0.03, 0.07, 0.05, metal(0xcfd5dc)), -0.185, -0.985, -0.14), k.at(k.box(0.03, 0.07, 0.05, metal(0xcfd5dc)), 0.185, -0.985, -0.14));
+      body.add(link);
+      add({ id: 'link', name: 'Link strip', obj: link, pull: [0, 0.6, -1.5], level: 3, fuse: 'board', face: [0, 0, -1], focusRadius: 0.5,
+        say: 'A shiny metal strip joins the two batteries, like a bridge between them.',
+        breaks: 'The batteries are not joined, so their pushes cannot add up. No flash!', symptom: 'I put in fresh batteries, but the phone sees no purple flash.',
+        learn: ['It is a bridge. It lets the electricity walk from one battery over to the next.',
+          'The two batteries sit side by side, one pointing up and one pointing down. The strip joins the plus end of one to the minus end of the other, so their pushes add together.',
+          'Joining batteries end to end like this is called wiring them in series. Two cells of about one and a half volts make about three volts.'] });
 
       // ---- circuit board (+ chip, infrared LED, parts, copper fingers)
       const pcb = k.mesh(new T.BoxGeometry(W - 0.24, H - 0.2, 0.04), k.mat(0xffffff, { map: k.pcbTexture(W - 0.24, H - 0.2, 5), roughness: 0.7 }));
       const board = k.group(pcb);
       body.add(board);
-      add({ id: 'board', name: 'Circuit board', obj: board, pull: [0, 0.4, -2.2], blockedBy: ['back', 'bat1', 'bat2'], reach: ['back'], face: [0, 0, -1], focusRadius: 2.2,
+      add({ id: 'board', name: 'Circuit board', obj: board, pull: [0, 0.4, -2.2], blockedBy: ['back', 'bat1', 'bat2', 'bs1', 'bs2'], reach: ['back'], face: [0, 0, -1], focusRadius: 2.2,
         say: "The circuit board is the remote's brain home. Little copper roads join the parts together.",
         breaks: 'The board connects everything. With it gone, the remote cannot do anything!',
         symptom: 'The buttons feel normal, but the phone sees no purple flash.',
         learn: ['It is like a tiny city. The copper roads are streets, and the parts are houses.',
-          'The board is fiberglass with thin copper lines on it. Parts are stuck to the lines with melted metal called solder.',
+          'The board is stiff fiberglass or pressed paper, with thin copper lines on it. Parts are stuck to the lines with melted metal called solder.',
           'Under every button, two copper roads end in little fingers that do not touch. Pressing the button bridges them, and the chip notices.'] });
+      // two small screws that hold the board to the case
+      [-0.42, 0.42].forEach((x, i) => {
+        const s = k.screw(0x9ea3ab, 0.08);
+        k.rot(k.at(s, x, -0.2, -0.02), -Math.PI / 2, 0, 0);
+        body.add(s);
+        add({ id: 'bs' + (i + 1), name: 'Board screw', kind: 'screw', obj: s, pull: [0, 0, -0.9], level: 3, fuse: 'board', blockedBy: ['back'], inside: 'screw-inside', face: [0, 0, -1], focusRadius: 0.5,
+          say: 'A little screw that holds the circuit board in place.', job: 'It keeps the board from rattling around inside the case.',
+          learn: ['It is like a tiny nail with a twist. It holds the board snug.',
+            'The thread bites into a plastic post. Turn it one way and it pulls the board down tight.',
+            'Without the screws, the board could slide around and the contacts under the buttons would line up badly.'] });
+      });
       // the chip
       const chip = k.group(k.at(k.box(0.34, 0.34, 0.06, k.mat(0x16161a, { roughness: 0.5 })), 0, 0.5, -0.05), k.at(k.cyl(0.02, 0.02, 0.01, k.mat(0x8a8f99), 10), -0.1, 0.62, -0.085));
       for (let i = 0; i < 8; i++) [-1, 1].forEach((s) => chip.add(k.at(k.box(0.07, 0.025, 0.02, metal(0xc9ced6)), s * 0.205, 0.38 + i * 0.034, -0.045)));
@@ -320,16 +373,17 @@
           'Infrared light has waves longer than red light. A phone camera can often catch a little of it, usually as purple.',
           'The LED is made of a crystal that gives off infrared when electricity flows through it. The flashes are also switched on and off very fast, often about 38 thousand times a second, so the TV can tell them from sunlight and lamps.'] });
       // little parts on the back of the board
-      const crystal = k.group(k.at(k.rot(k.cyl(0.05, 0.05, 0.2, metal(0xc9ced6), 14), 0, 0, Math.PI / 2), 0.3, 1.0, -0.06));
-      sub(board, 'board', { id: 'crystal', name: 'Crystal', obj: crystal, pull: [0.6, 0.3, -1.0], level: 3, face: [0, 0, -1], focusRadius: 0.4,
-        say: 'This tiny silver can keeps perfect time, like a metronome for the chip.',
-        breaks: 'The chip loses its beat, so it cannot time the flashes. Nothing gets sent!',
+      const reson = k.group(k.at(k.box(0.2, 0.13, 0.05, k.mat(0xc9a063, { roughness: 0.6 })), 0.3, 1.0, -0.06));
+      [-0.07, 0, 0.07].forEach((dx) => reson.add(k.at(k.box(0.014, 0.07, 0.012, metal(0xc9ced6)), 0.3 + dx, 0.9, -0.04)));
+      sub(board, 'board', { id: 'reson', name: 'Ceramic resonator', obj: reson, pull: [0.7, 0.3, -1.0], level: 2, face: [0, 0, -1], focusRadius: 0.4,
+        say: 'This tiny tan part keeps perfect time, like a metronome for the chip.',
+        breaks: 'The chip loses its beat, so it cannot time the flashes. Nothing gets sent!', symptom: 'I press Power, but the phone sees no purple flash.',
         learn: ['A metronome ticks the same speed every time so a musician can keep the beat. This does that for the chip.',
-          'Inside is a sliver of quartz that wiggles at one exact speed when electricity touches it. The chip counts the wiggles to time each flash.',
-          'Some remotes use a ceramic part called a resonator instead. It costs less, and is a little less exact, but it is good enough for this job.'] });
+          'It is a little piece of ceramic that wiggles at one exact speed when electricity touches it. The chip counts the wiggles to time each flash.',
+          'A quartz crystal is more exact, but a ceramic resonator costs less and is good enough for a remote.'] });
       const tr = k.group(k.at(k.box(0.14, 0.1, 0.07, k.mat(0x16161a, { roughness: 0.5 })), -0.3, 1.4, -0.055));
       [-0.04, 0, 0.04].forEach((dx) => tr.add(k.at(k.box(0.015, 0.06, 0.015, gold), -0.3 + dx, 1.32, -0.03)));
-      sub(board, 'board', { id: 'transistor', name: 'Transistor', obj: tr, pull: [-0.6, 0.3, -1.0], level: 3, face: [0, 0, -1], focusRadius: 0.4,
+      sub(board, 'board', { id: 'transistor', name: 'Transistor', obj: tr, pull: [-0.6, 0.3, -1.0], level: 2, inside: 'transistor', face: [0, 0, -1], focusRadius: 0.4,
         say: 'The transistor is a switch with no moving parts. The chip uses it to flick the light on and off.',
         breaks: 'The light never gets switched, so there are no flashes!',
         learn: ['It is like a helper hand on a light switch. The chip is gentle, so the helper does the heavy flicking.',
@@ -337,17 +391,72 @@
           'A transistor has three legs. A small signal on one leg lets a bigger current flow between the other two.'] });
       const res = k.group(k.at(k.rot(k.cyl(0.035, 0.035, 0.22, k.mat(0xd9b38c, { roughness: 0.6 }), 12), 0, 0, Math.PI / 2), 0.28, 1.45, -0.05));
       [[-0.06, 0xc0392b], [0, 0x2a2a2a], [0.06, 0xd98a1e]].forEach(([dx, c]) => res.add(k.at(k.rot(k.cyl(0.037, 0.037, 0.025, k.mat(c), 12), 0, 0, Math.PI / 2), 0.28 + dx, 1.45, -0.05)));
-      sub(board, 'board', { id: 'resistor', name: 'Resistor', obj: res, pull: [0.6, 0.5, -1.0], level: 3, face: [0, 0, -1], focusRadius: 0.4,
-        say: 'The resistor is like a speed bump for electricity.', job: 'It slows the electricity so the little light does not get too much and burn out.',
+      sub(board, 'board', { id: 'resistor', name: 'Resistor', obj: res, pull: [0.6, 0.5, -1.0], level: 2, face: [0, 0, -1], focusRadius: 0.4,
+        say: 'The resistor is like a speed bump for electricity.', inside: 'resistor-inside',
+        breaks: 'The light has no road for its electricity, so it never flashes!', symptom: 'I press Power, but the phone sees no purple flash.',
         learn: ['Cars slow down at a speed bump. Electricity slows down at a resistor.',
           'The colored stripes are a code that tells you how strongly it pushes back.',
           'The LED could be damaged by too much electricity. A resistor in line limits how much can flow.'] });
       const cap = k.group(k.at(k.rot(k.cyl(0.06, 0.06, 0.12, k.mat(0x1f4fa0, { roughness: 0.45 }), 16), Math.PI / 2, 0, 0), -0.32, 0.95, -0.09), k.at(k.rot(k.cyl(0.055, 0.055, 0.01, metal(0xc9ced6), 16), Math.PI / 2, 0, 0), -0.32, 0.95, -0.155));
-      sub(board, 'board', { id: 'cap', name: 'Capacitor', obj: cap, pull: [-0.6, 0.7, -1.0], level: 3, face: [0, 0, -1], focusRadius: 0.4,
+      sub(board, 'board', { id: 'cap', name: 'Capacitor', obj: cap, inside: 'cap-inside', pull: [-0.6, 0.7, -1.0], level: 3, face: [0, 0, -1], focusRadius: 0.4,
         say: 'The capacitor is a tiny bucket of electricity, ready for a quick drink.', job: 'It gives the chip a quick drink of electricity when the light flashes, so the chip stays steady.',
         learn: ['Picture a little bucket that fills slowly and pours quickly when the light flashes.',
           'When the LED flashes it needs a gulp of electricity all at once. The capacitor holds some close by so the chip keeps getting steady power.',
           'A capacitor is two metal plates with a thin gap between them. Charge builds up on the plates, and it can be let out fast.'] });
+      // more little parts on the back of the board
+      const mkRes = (x, y, bands) => {
+        const g = k.group(k.at(k.rot(k.cyl(0.035, 0.035, 0.22, k.mat(0xd9b38c, { roughness: 0.6 }), 12), 0, 0, Math.PI / 2), x, y, -0.05));
+        bands.forEach(([dx, c]) => g.add(k.at(k.rot(k.cyl(0.037, 0.037, 0.025, k.mat(c), 12), 0, 0, Math.PI / 2), x + dx, y, -0.05)));
+        return g;
+      };
+      const baseR = mkRes(-0.3, 1.2, [[-0.06, 0xd98a1e], [0, 0x2a2a2a], [0.06, 0xc0392b]]);
+      sub(board, 'board', { id: 'baseR', name: 'Base resistor', obj: baseR, pull: [-0.8, 0.5, -1.0], level: 3, inside: 'resistor-inside', face: [0, 0, -1], focusRadius: 0.4,
+        say: 'This resistor is a speed bump between the chip and the transistor.',
+        breaks: 'The chip cannot talk to the transistor, so the light never flashes!', symptom: 'The buttons click, but the phone sees no purple flash.',
+        learn: ['Think of a speed bump that lets only a gentle trickle through.',
+          'The chip sends its flash signal through this resistor to the transistor. The resistor keeps the signal gentle so nothing gets hurt.',
+          'A transistor needs a small, controlled current at its middle leg. The resistor sets that current.'] });
+      const indR = mkRes(0.28, 1.7, [[-0.06, 0xc0392b], [0, 0xc0392b], [0.06, 0x8a4b1e]]);
+      sub(board, 'board', { id: 'indR', name: 'Indicator resistor', obj: indR, pull: [0.8, 0.8, -1.0], level: 3, inside: 'resistor-inside', face: [0, 0, -1], focusRadius: 0.4,
+        say: 'A speed bump for the little red light, so it does not get too much electricity.', job: 'It keeps the little red light from getting too much electricity.',
+        learn: ['It is a speed bump for the red light, so it gets a gentle trickle.',
+          'Any LED needs something to limit its current, or it can burn out. This resistor does that job.',
+          'The stripes are a color code. Each stripe is a digit or a multiplier, and together they tell the size of the resistor.'] });
+      const mkCer = (x, y) => {
+        const g = k.group(k.at(k.box(0.08, 0.1, 0.045, k.mat(0xb98a3c, { roughness: 0.55 })), x, y, -0.05));
+        [-0.025, 0.025].forEach((dx) => g.add(k.at(k.box(0.012, 0.06, 0.012, metal(0xc9ced6)), x + dx, y - 0.075, -0.035)));
+        return g;
+      };
+      [[-0.08, 0.88, 'cer1', [-0.6, 0.4, -1.1]], [0, 0.12, 'cer2', [0.2, -0.6, -1.1]]].forEach(([x, y, id, pv]) => {
+        const g = mkCer(x, y);
+        sub(board, 'board', { id, name: 'Ceramic capacitor', obj: g, pull: pv, level: 3, inside: 'cap-inside', face: [0, 0, -1], focusRadius: 0.4,
+          say: 'A tiny tan capacitor, like a very small bucket of electricity.', job: 'It smooths out little bumps in the power so the chip stays calm.',
+          learn: ['It is a tiny bucket that fills and empties very fast.',
+            'Right next to the chip it soaks up little jumps in the electricity, so the chip gets a steady drink.',
+            'Ceramic capacitors are small, cheap and have no front or back, so they are easy to place on a board.'] });
+      });
+      const mkJump = (x, y, horiz) => {
+        const pts = Array.from({ length: 9 }, (_, n) => { const f = n / 8, a = (f - 0.5) * 0.26; return horiz ? [x + a, y, -0.04 - 0.05 * Math.sin(Math.PI * f)] : [x, y + a, -0.04 - 0.05 * Math.sin(Math.PI * f)]; });
+        return k.group(k.tube(pts, 0.014, k.metal(0xd7dce2, { roughness: 0.25 })));
+      };
+      [[-0.4, 0.55, true, 'jump1', [-0.9, 0.3, -1.0]], [0.42, 0.62, false, 'jump2', [0.9, 0.3, -1.0]]].forEach(([x, y, h, id, pv], i) => {
+        const g = mkJump(x, y, h);
+        sub(board, 'board', { id, name: 'Jumper wire', obj: g, pull: pv, level: 3, inside: 'copper-atoms', face: [0, 0, -1], focusRadius: 0.4,
+          say: 'A little wire hops over other copper roads, like a bridge over a river.',
+          breaks: 'A copper road is cut, so the signal cannot get across the board!', symptom: i ? undefined : 'I press Power, but the phone sees no purple flash.',
+          learn: ['It is a bridge that hops over a road below.',
+            'On a one-sided board, copper roads sometimes have to cross. A wire jumper lets one road pass over the other without touching.',
+            'It is a short piece of bare tinned wire soldered to two pads. It costs less than a second layer of copper.'] });
+      });
+      // a small red light that blinks when the remote sends
+      const indMat = k.glow(0x9a1a1a, 0xff3030);
+      const indBody = k.at(k.cyl(0.045, 0.045, 0.07, indMat, 14), 0.44, 1.95, -0.03), indDome = k.at(k.sphere(0.045, indMat, 14), 0.44, 1.985, -0.03);
+      const indG = k.group(indBody, indDome, k.at(k.box(0.015, 0.06, 0.012, gold), 0.415, 1.9, -0.03), k.at(k.box(0.015, 0.06, 0.012, gold), 0.465, 1.9, -0.03));
+      sub(board, 'board', { id: 'ind', name: 'Indicator LED', obj: indG, pull: [0.9, 1.0, -0.9], level: 3, inside: 'led-package', face: [0, 1, 0], focusRadius: 0.4,
+        say: 'A tiny red light you can see. It blinks to say, I am sending!', job: 'It blinks so you can see the remote is sending, but the TV does not need it.',
+        learn: ['It is a little lamp that says, hello, I am working.',
+          'Unlike the invisible infrared light, this red one is made for your eyes. It blinks along with each message.',
+          'An LED is a crystal that glows when electricity flows one way through it. Different crystals glow different colors.'] });
       // copper fingers under each button (front of the board)
       const fingers = k.group();
       BTN.forEach((b) => { [-0.025, 0.025].forEach((dx) => fingers.add(k.at(k.box(0.018, 0.1, 0.012, gold), b.x + dx, b.y, 0.026))); });
@@ -361,10 +470,12 @@
       // ---- button mat (+ carbon pads)
       const mat = k.group(k.at(k.rbox(1.14, 3.8, 0.03, k.mat(0x2a2d33, { roughness: 0.8 }), 0.02), 0, 0, 0.065));
       let pwrBtn = null;
+      const keyG = {};
       BTN.forEach((b) => {
         const m = k.at(k.rot(k.cyl(b.r, b.r, 0.2, k.mat(b.c, { roughness: 0.7 }), 18), Math.PI / 2, 0, 0), b.x, b.y, 0.17);
-        mat.add(m); if (b.pwr) pwrBtn = m;
+        (keyG[b.g] = keyG[b.g] || k.group()).add(m); if (b.pwr) pwrBtn = m;
       });
+      Object.keys(keyG).forEach((g) => mat.add(keyG[g]));
       body.add(mat);
       add({ id: 'mat', name: 'Button mat', obj: mat, pull: [0, 0.3, -2.4], blockedBy: ['board'], face: [0, 0, -1], focusRadius: 2.2,
         say: 'The rubber mat sits under the buttons. Press a button and it squishes, then springs back.',
@@ -372,6 +483,51 @@
         learn: ['It is like a bouncy pad. Press it and it squishes, let go and it pops back up.',
           'Every button is a little rubber dome. When you press one, it folds down, and the black pad under it touches the board.',
           'Rubber is springy, so no metal spring is needed. It is cheap to make in one piece, and it feels soft under your thumb.'] });
+      // the buttons come off the mat in groups
+      const KEYS = [
+        { g: 'power', id: 'kPower', name: 'Power button', level: 2, pull: [-1.3, 0.9, 1.4],
+          say: 'The red power button. Press it and the remote sends the on and off message.',
+          breaks: 'With no power button there is nothing to press, so the remote cannot send its message!', symptom: 'I cannot find the power button, it is missing.',
+          learn: ['It is like a doorbell for the TV. Push it and a message rings out.',
+            'Under the rubber is a black pad. Pressing squishes the pad onto two copper roads, and the chip notices.',
+            'Power has its own code. A TV that looks off is still listening for it, so the remote can wake it up.'] },
+        { g: 'input', id: 'kInput', name: 'Input button', level: 3, pull: [1.3, 0.9, 1.4],
+          say: 'This grey button picks what the TV shows, like a game box or a cable box.', job: 'It is only one button. The other buttons still work without it.',
+          learn: ['It is one key on a piano. Press it and it plays its own note, a secret light code.',
+            'Each button sends a different code. This one tells the TV to switch to another plug on its back.',
+            'The remote does not know what is plugged in. It only sends the code, and the TV decides what to do.'] },
+        { g: 'num', id: 'kNum', name: 'Number keys', level: 2, pull: [0, 0.4, 2.0],
+          say: 'The number keys pick a channel, like 5 or 12.', job: 'These keys are a group of ten. The remote still sends light without them.',
+          learn: ['Each number key is like a piano key. Press it and it plays its own note, a secret light code for that number.',
+            'Under every key is its own black pad and its own pair of copper roads, so the chip can tell the keys apart.',
+            'Remotes with lots of keys put them on a grid of rows and columns. The chip checks every crossing to find out which key was pressed.'] },
+        { g: 'arrow', id: 'kArrow', name: 'Arrow keys', level: 3, pull: [-1.5, 0.1, 1.2],
+          say: 'The left and right keys move a highlight around the menu on the TV.', job: 'They are just two buttons. The other buttons still work without them.',
+          learn: ['Think of a tiny steering wheel for the menu. Left and right steer the highlight.',
+            'Each arrow sends its own code, and the TV moves the highlight when it reads the code.',
+            'The remote does not know what is on the screen. It only sends codes, and the TV decides what each code means in its menu.'] },
+        { g: 'ok', id: 'kOk', name: 'OK button', level: 3, pull: [1.5, 0.1, 1.2],
+          say: 'The big middle button says yes to whatever is highlighted.', job: 'It is one button. The others still work without it.',
+          learn: ['It is like saying yes with your thumb.',
+            'The OK key sends a code that means pick this. The TV picks whatever is highlighted at that moment.',
+            'It sits in the middle and is a little bigger, because it is the one you press most in menus.'] },
+        { g: 'vol', id: 'kVol', name: 'Volume keys', level: 2, pull: [-1.6, -0.9, 1.4],
+          say: 'These keys make the TV louder or quieter.', job: 'They are a group of buttons. The remote still sends light without them.',
+          learn: ['Like a faucet. Plus lets more sound flow and minus lets less.',
+            'Hold a key down and the remote keeps repeating the code, so the volume keeps changing.',
+            'The remote never touches the sound. It sends a code, and the TV changes its own volume.'] },
+        { g: 'chan', id: 'kChan', name: 'Channel keys', level: 3, pull: [1.6, -0.9, 1.4],
+          say: 'These keys flip to the next or the last channel.', job: 'They are a group of buttons. The remote still sends light without them.',
+          learn: ['Like turning the pages of a picture book, one page up or one page down.',
+            'Each key has its own pad and pair of copper roads. Press one and the chip sends its code.',
+            'The TV does the flipping. The remote only says next or last.'] },
+        { g: 'menu', id: 'kMenu', name: 'Menu keys', level: 3, pull: [0, -1.3, 1.8],
+          say: 'The bottom keys open menus and go back.', job: 'They are a group of buttons. The remote still sends light without them.',
+          learn: ['Like the table of contents of a book. It opens a list to choose from.',
+            'Each key is a rubber bump with a black pad under it, just like the others.',
+            'Which menu opens, and what it says, is decided by the TV. The remote only sends the code.'] },
+      ];
+      KEYS.forEach((K) => sub(mat, 'mat', Object.assign({ obj: keyG[K.g], inside: 'switch-inside', face: [0, 0, 1], focusRadius: 1.0 }, K)));
       const pads = k.group();
       BTN.forEach((b) => pads.add(k.at(k.rot(k.cyl(0.05, 0.05, 0.012, k.mat(0x0b0b0c, { roughness: 0.9 }), 14), Math.PI / 2, 0, 0), b.x, b.y, 0.045)));
       sub(mat, 'mat', { id: 'pads', name: 'Carbon pads', obj: pads, pull: [0, 0, -1.4], level: 2, face: [0, 0, -1], focusRadius: 1.8,
@@ -392,25 +548,36 @@
           'It looks dark because it blocks light you can see. But infrared light goes right through it. That also makes the remote look neat.',
           'Tap Look inside to shrink down and see why your eyes cannot see this light, but a phone camera can.'] });
 
-      return { root, shell: [shell], parts, refs: { led, ledMeshes: [ledBody, ledDome], pwrBtn, flash, labFlash, labNone, labTV, beamTo, beamUp, lvl: 0 } };
+      // spread the small parts sideways so they clear the case in the exploded view
+      const FAN = { reson: [1.5, 0.4, -1.3], transistor: [-1.5, 0.6, -1.3], resistor: [1.7, 0.9, -1.0], cap: [-1.7, -0.1, -1.1], baseR: [-1.4, 1.1, -1.5], indR: [1.4, 1.6, -1.5],
+        cer1: [-1.3, -0.5, -1.4], cer2: [1.2, -1.0, -1.4], jump1: [-1.6, -0.9, -1.7], jump2: [1.6, -0.5, -1.7], ind: [1.3, 1.7, -1.0], chip: [0.9, -0.9, -1.2],
+        sp1: [-1.6, -1.4, -1.4], sp2: [1.6, -0.2, -1.4], ct1: [-1.2, 0.5, -1.4], ct2: [1.2, -1.5, -1.4], link: [0, 0.9, -1.5] };
+      parts.forEach((p) => { if (FAN[p.id]) p.pull = FAN[p.id]; });
+      return { root, shell: [shell], parts, refs: { led, ledMeshes: [ledBody, ledDome], indMeshes: [indBody, indDome], pwrBtn, flash, labFlash, labNone, labTV, beamTo, beamUp, lvl: 0 } };
     },
 
     evaluate(has, on) {
-      const bats = has('bat1') && has('bat2');
+      const bats = has('bat1') && has('bat2') && has('link');
       const wired = has('sp1') && has('sp2') && has('ct1') && has('ct2');
-      const buttons = has('mat') && has('pads');
-      const brain = has('board') && has('chip') && has('crystal') && has('transistor');
+      const buttons = has('mat') && has('pads') && has('kPower');
+      const roads = has('jump1') && has('jump2');
+      const brain = has('board') && has('chip') && has('reson') && has('transistor') && has('baseR') && has('resistor') && roads;
       const touch = has('fingers');
       const lit = has('led');
       const alive = on && bats && wired && buttons && brain && touch && lit;
       let reason = '';
       if (on && !alive) {
-        reason = !bats ? 'There are no batteries, so there is no electricity!'
+        reason = !(has('bat1') && has('bat2')) ? 'There are no batteries, so there is no electricity!'
+          : !has('link') ? 'The two batteries are not joined, so their pushes cannot add up!'
           : !wired ? "The batteries aren't touching the metal, so no electricity gets through!"
           : !has('mat') ? 'The button mat is gone, so there is nothing to press!'
+          : !has('kPower') ? 'The power button is gone, so there is nothing to press!'
           : !has('board') ? 'The circuit board is gone, so nothing is connected!'
           : !(has('pads') && touch) ? 'Pressing makes no connection, so the remote never hears you!'
-          : !brain ? "The remote's brain is missing, so it cannot send a message!"
+          : !roads ? 'A copper road on the board is cut, so the message cannot get across!'
+          : !(has('reson') && has('chip')) ? "The remote's brain has lost its beat or is missing, so it cannot send a message!"
+          : !(has('transistor') && has('baseR')) ? 'The little switch for the light is not working, so the light never flashes!'
+          : !has('resistor') ? 'The light has no road for its electricity!'
           : 'There is no little light to send the message!';
       }
       return { alive, reason };
@@ -425,6 +592,7 @@
       }
       r.lvl = lvl;
       r.ledMeshes.forEach((m) => { m.material.emissiveIntensity = lvl * 3.2; });
+      r.indMeshes.forEach((m) => { m.material.emissiveIntensity = lvl * 2.6; });
       r.led.visible = ir && lvl > 0.2; r.led.scale.setScalar(0.5 + lvl * 0.7);
       r.flash.visible = ir; r.flash.material.opacity = 0.2 + 0.8 * lvl;
       r.beamTo.visible = r.beamUp.visible = ir && lvl > 0.3;

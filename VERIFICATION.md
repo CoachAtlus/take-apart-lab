@@ -266,3 +266,208 @@ Count note: the devices report says "20 edits (19 distinct claims)" but its tabl
 5. **Optional, low priority**: led-tv.js:292 "lots of columns" could go back to "hundreds of columns." Source driver ICs typically have hundreds of outputs, so the original was likely right and the softening lost information.
 
 6. **Optional, low priority**: worlds.js:606 "It is only a few atoms thick." Modern high-k layers are physically thicker than the old SiO2 (~1.2 nm). "A few atoms" is still defensible, but the number is loose.
+
+---
+
+## Depth pass (teardown parts, 2026-11-14)
+
+After the devices were deepened into real teardown part lists, the new text was checked again:
+
+- **Three Claude Sonnet checkers**, one per three devices, about 590 claims. 15 string fixes. Only the toy car, doorbell and controller checker used web sources; the phone, tube TV and flashlight checker worked from memory.
+- **Claude Haiku second pass with web sources** on the phone, tube TV and flashlight: 26 claims checked, 23 confirmed, 0 wrong, 3 unverified. One understatement fixed afterward (the flashlight driver switches hundreds of thousands of times a second).
+- **Logic issues found and fixed in code:** the doorbell's high-note bar was drawn longer than the low-note bar (swapped); the controller's trigger magnet and sensor changed nothing on screen (now that side stops buzzing back).
+- **Logic simplifications left as is:** a pulled video amp in the tube TV turns that color off (a real one often turns it fully on); a pulled flashlight smoothing capacitor makes the light flicker (real ones mostly ripple); the controller antenna is all-or-nothing (real ones lose range); the toy car's drawn gear sizes are 2.5:1 while the tooth counts are 2:1.
+
+### Phone, tube TV, flashlight
+
+#### Fact-check depth 1 (phone, crt-tv, flashlight)
+
+Method: checked against known teardown and electronics knowledge (iFixit-style phone teardowns, CRT service practice, LED flashlight driver design). No live web lookups were done, so everything below is "known from domain knowledge", not freshly sourced.
+
+##### phone.js (~75 claims checked)
+Fix:
+- NFC chip learn: "It only turns on when it is near a reader, which helps keep it safe." -> "It only works from very close, so a stranger across the room cannot read it. That helps keep it safe." (NFC controllers poll periodically; they do not switch on only near a reader. Short range, about 4 cm, is the real safety point.)
+Logic: none found.
+Unverified / simplifications (left as is):
+- Vibration motor / Buzz weight describes a spinning off-center weight. True for older and many Android phones; recent iPhones use a linear Taptic Engine that does not spin.
+- Touch layer as a separate grid: modern OLED phones often build touch into the display. Fine as a simplification.
+- "Two or three microphones": many phones have three or four.
+- Wireless charging coil described as on the back glass: usually a separate piece stuck behind it. Fine.
+- Battery pull tabs are iPhone-style stretch-release strips; Android batteries differ.
+
+##### crt-tv.js (~95 claims checked)
+Fixes:
+- SAW filter learn: "The antenna brings in lots of channels at once. This filter lets through only the narrow band you picked..." -> "The tuner picks your channel, and this filter cleans it up. It lets through only the narrow band that channel uses, ..." (the SAW filter sits after the tuner in the IF stage, not at the antenna).
+- Antenna terminals job: "... so the rabbit ears still work without it." -> "... The rabbit ears still work without it." (confusing wording).
+Verified true: 25,000 V anode, about 15,000 lines/s (15.7 kHz), 60 Hz vertical, 3.58 MHz color subcarrier (about 3.6 million), 300 ohm twin lead, PTC degauss thermistor and the "boing", purity (2-pole) and convergence (4/6-pole) rings, shadow mask angles, aquadag outer coat plus ground strap acting as HV filter capacitor, implosion band, RCA colors (yellow video, white left, red right), neck board video amps with spark gaps, loss of both deflections gives a single bright dot, loss of vertical deflection gives a horizontal line.
+Logic issues (not changed):
+- Neck board and video amp removal ("screen went dark", casts like "blue and green"): in a real set a dead video amp often drives that gun fully on (bright single-color raster) rather than off. The game's "gun off" model is a simplification, not a clear error.
+- Removed yoke wedges and flyback-less cases fine.
+Unverified:
+- IF coil cans: plausible for older sets; many later sets use only a SAW filter plus IF chip.
+- Wedge text says a technician "can loosen them to adjust" tilt; real practice is to loosen the yoke clamp and reposition the wedges. Close enough.
+
+##### flashlight.js (~80 claims checked)
+Fix:
+- Inductor learn: "on and off thousands of times a second" -> "many thousands of times a second" (real LED drivers switch at tens to hundreds of kHz).
+Verified true: aluminum-base (MCPCB) star board with insulating layer, thermal paste fills micro gaps, O-ring seals, boost/buck driver with inductor, diode, output capacitor and sense resistor, 2 AA in series about 3 V, nickel-plated steel positive cap on AA, spring contacts and tail-cap return through the tube, IP-style waterproof ratings.
+Logic issues: none clear. Missing smoothing capacitor causing flicker is a plausible but exaggerated effect (real result is ripple, usually still lit).
+Unverified: "Switch ring" (a ring pinching a rubber boot around the button) is a plausible but unsourced part; kept.
+
+Syntax check passed on all three files. No em dashes in added text.
+
+### Remote, toaster, solar light
+
+#### Fact-check, depth 2: remote.js, toaster.js, solar-light.js
+
+Method: read all kid-facing strings of the added parts, checked against teardown knowledge plus two searches (toaster electronic-timer teardowns and patents; solar garden light YX8018-style boards). About 150 claims checked.
+
+##### toaster.js
+Parts list verdict: the latch electromagnet, RC timer (timing capacitor, timing resistor, control transistor, browning pot), rectifier diode and dropping resistor are real and match published toaster designs. One teardown-type description: capacitor charges through a resistor, and at a set voltage the magnet's power is cut so the spring pops the toast. The browning control is a variable resistor that sets the charge rate. Mica cards, nichrome, guard wires, thermal fuse, terminal block, contacts and crumb tray are standard. The diode plus dropper feeding the magnet from the wall is a common cheap design (some teardowns use logic or a microcontroller instead; the learn text says "many toasters", which is fine).
+
+Fixes (string text only):
+- Lever knob job: "keeps the metal lever from getting hot" -> "keeps your fingers off the metal lever" (the lever is not the hot part).
+- Heating wires learn: "folded back and forth on a mica card" -> "wound back and forth around a mica card" (the ribbon is wound on the card).
+- Crimp terminal learn: "cannot be soldered easily because it gets so hot" -> "Solder does not stick well to nichrome and would melt in that heat" (accurate reason).
+
+Logic issues: none found. Symptoms match cause and effect (open resistor, capacitor, pot or transistor all give "never releases"; missing diode or magnet gives "pops right back up"; missing fuse gives dead toaster).
+
+Unverified or simplified:
+- Exact placement of the transistor (it "cuts off" magnet power) varies by design; fine as a simplification.
+- Contacts described as brass; real toasters often use silver or copper alloys. Left as is.
+- Spring "stretches" when lever goes down; some carriages use compression springs. Harmless.
+
+##### remote.js
+Parts list verdict: IR LED, transistor driver with base resistor, ceramic resonator, chip, small capacitor, wire jumpers, indicator LED with its resistor, carbon pads, copper fingers, battery contacts and link strip are all normal in a TV remote. 940 nm, 38 kHz carrier, and phone cameras seeing IR as purple or white are correct. Light wavelength numbers (400 to 450 nm blue, 650 to 700 nm red) are fine.
+
+Fix:
+- Board learn: "The board is fiberglass" -> "The board is stiff fiberglass or pressed paper" (cheap remotes use paper-phenolic boards).
+
+Logic issues: none found.
+
+Unverified:
+- Whether a given remote has an indicator LED, a separate capacitor or jumpers varies by model; kept as "a typical remote".
+- Ceramic resonator "tan": common colors vary (tan, yellow, blue). Left as is.
+
+##### solar-light.js
+Parts list verdict: lens-and-LED, rechargeable cell, slide switch, blocking diode, booster coil with a switching control chip (YX8018-style), filter capacitor, resistor, panel wires, bus ribbons, frame, cover and seal are all consistent with real garden lights. The blocking diode (stops the battery draining through the panel at night) and the inductor boost are confirmed in teardowns. Cell physics (boron bottom layer, phosphorus top layer, fingers, back metal) is correct.
+
+Fixes: none needed.
+
+Logic issues: none found for the evaluate logic as read. Note only: the light sensor part ("Light sensor") is correct for lights using a photoresistor. Many cheap lights have no photoresistor and the chip senses darkness from the panel voltage. The learn text already says "Some solar lights skip this part", so it is honest.
+
+Unverified:
+- LED series resistor: many boost-driver (YX8018) boards have no LED resistor, so the "Resistor" and "Small resistor" parts are typical of some boards, not all.
+- Filter capacitor presence and size vary by board; plausible.
+- Battery described as steel can with raised plus button on AA size: true for AA; NiMH or NiCd chemistry not named in text, fine.
+- "LED hardly gets warm": true enough for a kid-level statement.
+
+### Toy car, doorbell, controller
+
+#### Fact-check depth 3: toy-car.js, doorbell.js, controller.js
+
+Sources used: web search on chime mechanism (ding on press, dong on release via return spring; two-bar chime; front/rear solenoids; voltage matching) and iFixit Xbox One Wireless Controller teardown (triggers use linear Hall sensors). The rest rests on standard electronics knowledge. All three files pass the node syntax check. No em dashes found in any file.
+
+##### toy-car.js
+Parts fidelity: OK. A 3-pole armature with a 3-segment commutator is correct for small toy motors (one coil per arm, "always a push, can start from any position" is true). Two arc magnets in a steel can (can carries flux), brushes on a plastic end cap with solder tabs, 2xAA holder with a link strap, contact springs on the minus ends, flat tabs on the plus ends, 3 V from two AA, slide switch, red/white/black wiring all match real toys.
+
+Fix:
+- Bumper say: "the car's soft nose" -> "the car's tough edge" (the learn text calls it a bar of tough plastic, so "soft" contradicted it).
+
+Logic / geometry notes (not changed):
+- Gear teeth: BIG n=16, SMALL n=8 (2:1, text says "twice") but radii are 0.4 vs 0.16 (2.5:1). Teeth count matches the text; the pitch radii do not match the tooth count. Visual only.
+- At the left end of the battery tray, springL (cell 1 minus), tabL (cell 2 plus) and the strap all occupy the same junction. Electrically fine for a series pair, but redundant: in a real holder the strap/tab/spring there is one piece.
+- Inside-the-motor world uses a 2-segment commutator ("two copper halves"), the car's motor uses three. Fine as a simplified model, but a curious reader may notice. Left as is.
+
+Unverified: none material.
+
+##### doorbell.js
+Parts fidelity: OK. Solenoid with iron plunger, return spring, two tuned bars, rubber mounts, felt/soft tips, bobbin, terminal block labeled TRANS / FRONT / REAR (standard chime labels; search did not surface a page confirming them, so counted as unverified but consistent with typical units), step-down transformer with laminated core, primary (more turns) and secondary (fewer turns), lighted button with resistor + LED, insulated staples. Ding on press, dong on release matches the animation (magnet on 0 to 0.7 s, spring return after). Wiring runs match the text: red transformer to button, white button to FRONT, black transformer to TRANS, coil between FRONT and TRANS.
+
+Fixes (text contradicting the geometry: ding bar is the LONGER bar, h=1.9, dong bar the shorter, h=1.5, the reverse of "short = ding"):
+- Ding bar learn: "This one is short, so it sings the high note, ding." -> "Ding is the high note of the pair."
+- Dong bar fact: "The longer bar shakes slower... Long and low is dong." -> "A longer bar shakes slower, so its note is lower. Low is dong."
+- Dong bar say: "It is longer, so its note is lower." -> "It rings the lower note."
+- Dong bar learn: "Short and fast is ding, long and slow is dong." -> "Short and fast sounds high, long and slow sounds low."
+
+Logic issue (not changed, geometry): the ding bar (high note, 660 Hz) is drawn longer than the dong bar (494 Hz). Swapping the two heights (bar1 h=1.5, bar2 h=1.9) would make picture, sound and text agree.
+
+Judgment calls left as is:
+- Transformer "gentle faucet" analogy: a faucet limits flow, a transformer lowers voltage. Acceptable kid analogy; the learn text then states the real rule (fewer turns, lower voltage).
+- A real two-note chime usually has a second solenoid for REAR (single ding); here REAR is a spare terminal, and the text says so.
+- Gravity, not a spring, returns the plunger in some real chimes; the spring version is also common.
+
+Unverified: felt pads on plunger tips (plausible, some chimes use plastic/rubber), TRANS/FRONT/REAR labels (see above).
+
+##### controller.js (modeled on an Xbox-style pad: layout, button colors/positions, Menu/View names all match)
+Parts fidelity: OK. Hall-sensor triggers with a magnet are correct for Xbox One (iFixit: linear Hall sensors on both triggers); the text already hedges "some controllers use a potentiometer". Thumbsticks as potentiometers with a hedge for Hall sticks is correct. Rubber membrane with carbon pills plus a contact board and FFC/ZIF ribbon, tactile-dome bumper switches, pouch Li-ion cell with protection board, wires and keyed plug, Bluetooth chip, chip antenna, crystal, regulator, charger chip, motor driver, diode, SMD caps/resistors, light pipe, and two brushed eccentric-weight rumble motors (can, magnet, coil, commutator, brushes, shaft, off-center weight) are all real. 3 to 4.2 V Li-ion, CC then CV charging, 2.4 GHz Bluetooth, total internal reflection explanation: all true.
+
+Fixes:
+- Antenna breaks: "No antenna, so the radio waves cannot get out!" -> "Without the antenna the radio is too weak, so the game cannot hear it well!" (a missing antenna sharply cuts range, it does not stop the radio entirely).
+- Top shell learn: "a metal mold that is pressed shut around hot plastic" -> "hot melted plastic is squirted into a metal mold and cools into the shape" (injection molding).
+
+Logic issues (not changed):
+- evaluate `link` requires the antenna, so removing it fully disables "link" (anything keyed to it). Reality is degraded range, not none. The kid text now says weak.
+- `aL`/`aR` (trigger magnet + Hall sensor) are computed in evaluate but tick does not use them, so removing a trigger magnet or Hall sensor has no visible effect while the breaks/symptom text says the game cannot tell how hard you squeeze. Fine as a described effect, but nothing animates it.
+- Crystal removal stops the controller (brain = board, chip, reg, xtal). Plausible for a radio MCU; some chips have internal oscillators, but the Bluetooth radio needs a crystal.
+
+Unverified: thumbstick sensor type in the specific model (potentiometer vs Hall), D-pad switch type (membrane vs dome); text is generic enough to be true either way.
+
+##### Counts
+Claims checked: about 190 (kid-facing say/learn/breaks/symptom/job/fact strings plus part lists across the three files)
+Fixes: 7 string edits (1 toy car, 4 doorbell, 2 controller)
+Logic issues reported: 5 (doorbell bar length vs pitch, controller antenna all-or-nothing, controller trigger-sensor unused flags, plus two minor geometry notes in toy car)
+Unverified: 5
+
+### Second model: phone, tube TV, flashlight (web sources)
+
+#### Second fact-check, web-sourced (phone.js, crt-tv.js, flashlight.js)
+
+Method: WebFetch on Wikipedia pages and WebSearch for sources that Wikipedia could not supply (iFixit, TI, Analog Devices, Android Police). Each claim below is tied to the source that was read. Claims were taken from the kid-facing `say`, `learn` and `fact` strings in the three files.
+
+Result: 26 claims checked against a web source. 0 wrong. 0 fixes made. 3 unverified.
+
+##### Claims
+
+####### crt-tv.js
+1. Anode voltage about 25,000 V (fact string line 421; learn line 555). Source: https://en.wikipedia.org/wiki/Cathode-ray_tube says color TV tubes run "24-32 kV". CONFIRMED.
+2. Outer graphite coat (aquadag) is grounded by the strap, and the inner and outer coats with the glass act as a capacitor (learn line 275). Source: same Cathode-ray tube page says the outer coating "is connected to ground" and the coatings act as a capacitor that filters the anode voltage. CONFIRMED.
+3. Horizontal sweep about 15,000 lines a second (15,734 in NTSC; learn line 555 for the flyback). Source: https://en.wikipedia.org/wiki/NTSC says "15,734 lines per second". CONFIRMED.
+4. Vertical sweep about 60 times a second (learn line 560). Source: https://en.wikipedia.org/wiki/NTSC gives 30/1.001 frames, so 59.94 fields a second. CONFIRMED.
+5. Color subcarrier about 3.6 million ticks a second in North America (learn line 577). Source: https://en.wikipedia.org/wiki/NTSC gives 315/88 MHz = 3.579545 MHz. CONFIRMED.
+6. Antenna twin lead about 300 ohms (learn line 201). Source: https://en.wikipedia.org/wiki/Twin-lead says standard TV twin-lead is 300 ohms. CONFIRMED.
+7. RCA colors: yellow video, white left audio, red right audio (learn line 208). Source: https://en.wikipedia.org/wiki/RCA_connector says "yellow for composite video, red for the right audio channel, and white or black for the left". CONFIRMED.
+8. Shadow mask holes arranged in triangles, later masks used slots (learn line 261). Source: https://en.wikipedia.org/wiki/Shadow_mask says phosphor dots are in a triangular arrangement and later masks "use rectangular slots instead of circular holes". CONFIRMED.
+9. Aperture grille (Trinitron) uses vertical slots (learn line 261 contrast). Source: https://en.wikipedia.org/wiki/Trinitron describes "vertical slots cut in" a steel sheet, flagged on the page as disputed. CONFIRMED with that caveat.
+10. Degauss coil starts strong and fades; its thermistor shuts it off after power-on (say line 293; learn line 521). Source: https://en.wikipedia.org/wiki/Degaussing says the field has "decreasing amplitude" and the thermistor is "a simple positive temperature coefficient (PTC) thermistor device". CONFIRMED.
+11. PTC thermistor resistance rises with heat (learn line 521). Source: https://en.wikipedia.org/wiki/Thermistor says "PTC thermistors have more resistance at higher temperatures". CONFIRMED.
+12. Ferrite is an iron-oxide ceramic that hardly conducts electricity (learn line 383). Source: https://en.wikipedia.org/wiki/Ferrite_(magnet) says ferrites are "magnetic ceramics containing iron oxide" and "poor conductors of electricity". CONFIRMED.
+13. Common-mode choke has two windings on one core (learn line 517). Source: https://en.wikipedia.org/wiki/Common-mode_choke says "two parallel coil windings on a single core". CONFIRMED.
+14. SAW stands for surface acoustic wave, and SAW filters pull subcarriers out of TV signals (learn line 566). Source: https://en.wikipedia.org/wiki/Surface_acoustic_wave gives the definition and says SAW filters are "frequently used in television receivers, for extracting subcarriers". CONFIRMED.
+15. Yoke wedges: three rubber wedges (learn line 390). No source checked. UNVERIFIED (left as is; plausible, not contradicted).
+16. Flyback steps the voltage up to about 25,000 V (learn line 555). Covered by claim 1. CONFIRMED.
+
+####### phone.js
+17. NFC works only at very short range (learn line 249, edited by the first checker). Source: https://en.wikipedia.org/wiki/Near-field_communication says NFC "typically requiring a separation of 10 cm (3+7/8 in) or less". The first checker's fix is correct. The text says "a few centimeters", which is inside the 10 cm limit. CONFIRMED.
+18. Gyroscope senses rotation, accelerometer senses linear push (learn line 253). Source: https://en.wikipedia.org/wiki/Gyroscope says a gyroscope senses rotation and an accelerometer senses linear acceleration. The "tilt" wording is not covered by that page. CONFIRMED for the main point; tilt part UNVERIFIED.
+19. Phones combine accelerometer and gyroscope in one chip (learn line 253). Source: iFixit chip IDs, found by WebSearch, list Bosch Sensortec accelerometer and gyroscope on iPhone 16 and 16 Pro boards, and an InvenSense 6-axis combo on iPhone 6 and 6s. Search result pages: https://www.ifixit.com/Guide/iPhone+16+Chip+ID/177222 and https://www.ifixit.com/Teardown/iPhone+6s+Teardown/48170. CONFIRMED.
+20. Phone battery uses lithium-ion cells (learn line 153). Source: https://en.wikipedia.org/wiki/Lithium-ion_battery says handheld electronics "mostly use lithium polymer batteries", which is in the lithium-ion family. CONFIRMED with note (the more exact term is lithium polymer; not changed).
+21. Battery protection circuit cuts the cell off when it is out of safe range (learn line 160). Source: https://en.wikipedia.org/wiki/Lithium-ion_battery says "many lithium-ion cells (and battery packs) contain fail-safe circuitry that disconnects the battery". CONFIRMED.
+22. Phone vibration motor spins an off-center weight (say line 352). Wikipedia URL returned 404. Source: WebSearch results from TI SLOA194 (https://ti.com/lit/SLOA194) and Android Police (https://www.androidpolice.com/2020/10/20/a-lot-more-goes-into-good-smartphone-haptics-than-youd-think/) say an ERM is "a motor with a lopsided weight". The same sources say many phones use a linear resonant actuator instead. CONFIRMED for ERM; the game describes one common type and is left as is.
+23. Phone microphone count: "two or three" (learn text, not changed). iFixit iPhone 6 teardown (search snippet) reports 2 MEMS microphones. TechInsights gives an ambiguous count for the iPhone SE. UNVERIFIED (many phones have three or more).
+24. Touch chip scans the grid many times each second (learn line 123). No source checked. UNVERIFIED (plausible, not a specific number).
+
+####### flashlight.js
+25. Two AA cells give about 3 volts (line 158). Source: https://en.wikipedia.org/wiki/AA_battery gives 1.50 V nominal for an alkaline AA. Two in series is about 3 V. CONFIRMED.
+26. The bumpy nub is the positive end of an AA cell (learn line 289). Source: https://en.wikipedia.org/wiki/AA_battery describes "the positive terminal button". CONFIRMED.
+27. LED board is aluminum with an insulating layer for heat (learn line 138 and say line 136). Source: https://en.wikipedia.org/wiki/Printed_circuit_board says metal-core boards are "used for parts requiring significant cooling - power switches, LEDs" and "clad with thermally conductive thin dielectric" on aluminum. CONFIRMED.
+28. Switching LED driver switches many thousands of times a second (learn line 180; first checker's edit). Sources: TI LM3405A datasheet at https://ti.com/lit/gpn/LM3405A has a 1.6 MHz switching frequency, and the Analog Devices MAX16834 buck-boost example at https://www.analog.com/en/technical-articles/designing-buck-boost-LED-driver-using-MAX16834.html runs at about 455-495 kHz. "Many thousands" understates this but is not wrong. CONFIRMED.
+29. Thermal paste between board and head fills micro-gaps (learn line 145). No source checked. UNVERIFIED (common practice, not a number).
+
+##### Changes
+- None. No clear errors were found, so no files were edited and no syntax check was needed.
+- The first checker's NFC fix (phone.js learn line 249) checks out.
+
+##### Open items for a human
+- Yoke wedge count (three), touch scan rate, phone microphone count ("two or three") and thermal-paste detail remain unsourced.
+- The vibration-motor line describes one common type of phone motor, not all phones. It is a simplification, not an error.

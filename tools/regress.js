@@ -17,9 +17,11 @@
       const crit = TAL.debug.gameText();
       await step(tag + ' find', () => TAL.debug.game('find'), 200);
       await step(tag + ' endgame', () => TAL.debug.endGame(), 50);
-      await step(tag + ' explode', () => TAL.debug.explodeAll(), 2500);
+      // Big devices take longer to come apart and go back: wait until the parts settle (up to 20 s).
+      const settle = async (want) => { for (let i = 0; i < 80; i++) { const ps = TAL.app.inst.parts.filter((p) => !p.fixed); if (ps.every((p) => p.target === want && Math.abs((p.t || 0) - want) < 0.02)) return; await W(250); } };
+      await step(tag + ' explode', async () => { TAL.debug.explodeAll(); await settle(1); }, 200);
       const outN = TAL.app.inst.parts.filter((p) => p.target === 1).length;
-      await step(tag + ' fix', () => TAL.debug.fixAll(true), 2500);
+      await step(tag + ' fix', async () => { TAL.debug.fixAll(true); await settle(0); }, 200);
       const back = TAL.app.inst.parts.filter((p) => p.target === 1).length;
       let mission = '-';
       if (TAL.app.inst.parts.some((p) => p.symptom)) { await step(tag + ' mission', () => TAL.debug.startMission(), 200); mission = TAL.debug.state().mission ? TAL.debug.state().mission.broken : 'none'; await step(tag + ' stopmission', () => TAL.debug.startMission(), 100); }

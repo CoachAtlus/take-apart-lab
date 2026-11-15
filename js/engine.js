@@ -1174,7 +1174,7 @@
     }
     const gap = clamp(5500 / Math.max(1, order.length), 28, 170);
     order.forEach((p, i) => setTimeout(() => { if (token === App.seq && p.target === 0) removePart(p, { quiet: true, noGuide: true }); }, i * gap));
-    setTimeout(() => { if (token === App.seq) { Voice.say(`Kaboom! You took the whole ${inst.def.short} apart! That's ${inst.parts.length} pieces! Tap any piece to hear what it does.`, null, false, ['Kaboom! You took the whole thing apart!', 'Tap any piece to hear what it does.']); Guide.advance(false); updateUI(); } }, order.length * gap + 400);
+    setTimeout(() => { if (token === App.seq) { Voice.say(`Kaboom! You took the whole ${inst.def.short} apart! That's ${inst.parts.filter((q) => !q.fixed).length} pieces! Tap any piece to hear what it does.`, null, false, ['Kaboom! You took the whole thing apart!', 'Tap any piece to hear what it does.']); Guide.advance(false); updateUI(); } }, order.length * gap + 400);
   }
   function fixAll(silent) {
     const inst = App.inst, token = ++App.seq;

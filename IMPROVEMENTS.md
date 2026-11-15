@@ -79,11 +79,24 @@ The first list came from an audit of every part and inside view on 2026-11-14. M
   - game controller;
   - phone.
 
+- [x] **Depth over breadth:** Advanced is now a real teardown on every device, not a sampler. Advanced piece counts, before to after:
+  - tube TV 45 to 100;
+  - phone 20 to 84;
+  - controller 25 to 79;
+  - toy car 26 to 58;
+  - toaster 24 to 55;
+  - solar light 20 to 48;
+  - remote 25 to 47;
+  - doorbell 16 to 47;
+  - flashlight 17 to 36.
+  Boards come apart into chips, crystals, capacitors and connectors. Motors come apart into brushes, coils and magnets. Switches come apart into springs and contacts. Must-have parts follow the real circuit, and every device has 10 to 50 Fix-it symptoms. Checked by three Sonnet fact-checkers and a Haiku second pass (see `VERIFICATION.md`).
+
 ## Still to do
 
 - [ ] **Real iPad:** check Sparky's voice, the device sounds and smoothness, especially the LED TV at Advanced (266 parts).
 - [ ] **Play test:** watch a 5-year-old use it for 10 minutes and note where he gets stuck.
 - [ ] **Washed-out colors:** plain plastic colors look pale under the bright studio lighting (the controller and toaster especially). Tune the exposure or materials once on a real screen.
+- [ ] **Tiny parts:** at Advanced, small board parts look like dots in the full exploded view. Tapping one zooms in, but a "zoom to this module" step could help.
 - [ ] **Small views:** a few inside views still render small (polarizer, color filter, fuse) and some exploded views spread wide (LED TV, solar light).
 - [ ] **Sparky's guide** can't point at a dial yet. Teach the guide a "turn the dial" step.
 - [ ] **Unverified claims:** the claims the fact-checkers couldn't confirm are listed in `VERIFICATION.md`. Have a person who knows the subject look them over.
